@@ -48,6 +48,12 @@ type Config struct {
 	RefreshToken string // SPOTIFY_REFRESH_TOKEN (optional headless bootstrap)
 	LastFMKey    string // LASTFM_API_KEY (optional, discovery seeds)
 
+	// TerminalURL is the Zellij web client address (SPOTIFYTOOL_TERMINAL_URL),
+	// e.g. https://homelab.tailnet-name.ts.net:8082. When set, the dashboard
+	// grows a terminal pane (iframe + open-in-tab link) per the PRD's
+	// control-room layout. Empty hides the pane.
+	TerminalURL string
+
 	ConfigDir string // holds token.json
 	DataDir   string // holds the SQLite db, taste profile, digests
 }
@@ -83,6 +89,7 @@ func Load() Config {
 		ClientID:     strings.TrimSpace(os.Getenv("SPOTIFY_CLIENT_ID")),
 		RefreshToken: strings.TrimSpace(os.Getenv("SPOTIFY_REFRESH_TOKEN")),
 		LastFMKey:    strings.TrimSpace(os.Getenv("LASTFM_API_KEY")),
+		TerminalURL:  strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TERMINAL_URL")),
 		ConfigDir:    configDir(),
 		DataDir:      dataDir(),
 	}

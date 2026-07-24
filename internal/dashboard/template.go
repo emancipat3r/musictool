@@ -47,19 +47,50 @@ const pageTemplate = `<!doctype html>
   .saved { color: var(--green); margin-left: 1rem; }
   .pill { display:inline-block; background: var(--bg2); border-radius: 999px;
           padding: .05rem .5rem; font-size: .75rem; color: var(--fg-dim); }
+  main.wide { max-width: none; }
+  main a { color: var(--accent); }
+  .term iframe { width: 100%; height: calc(100vh - 180px); border: 1px solid var(--bg2);
+                 border-radius: 8px; background: #1d2021; }
+  code { background: var(--bg1); border-radius: 4px; padding: .1rem .35rem;
+         font-size: .85em; color: var(--accent); }
 </style>
 </head>
 <body>
 <header>
   <h1>spotifytool</h1>
   <nav>
-    <a href="/" {{if not .ShowProfile}}class="active"{{end}}>dashboard</a>
+    <a href="/" {{if eq .Page "dashboard"}}class="active"{{end}}>dashboard</a>
     &nbsp;·&nbsp;
-    <a href="/profile" {{if .ShowProfile}}class="active"{{end}}>taste profile</a>
+    <a href="/profile" {{if eq .Page "profile"}}class="active"{{end}}>taste profile</a>
+    &nbsp;·&nbsp;
+    <a href="/terminal" {{if eq .Page "terminal"}}class="active"{{end}}>terminal</a>
+    {{if .TerminalURL}}&nbsp;·&nbsp;<a href="{{.TerminalURL}}" target="_blank" rel="noopener">open session ↗</a>{{end}}
   </nav>
 </header>
-<main>
-{{if .ShowProfile}}
+<main {{if eq .Page "terminal"}}class="wide"{{end}}>
+{{if eq .Page "terminal"}}
+  {{if .TerminalURL}}
+    <section class="term">
+      <h2>claude session
+        <span class="muted" style="font-size:.8rem;text-transform:none">
+          same conversation as <code>zellij attach</code> over Tailscale SSH and the mobile app —
+          <a href="{{.TerminalURL}}" target="_blank" rel="noopener">open full-screen ↗</a>
+        </span>
+      </h2>
+      <iframe src="{{.TerminalURL}}" title="Zellij web client (claude session)"
+              allow="clipboard-read; clipboard-write"></iframe>
+      <p class="muted">Blank frame? The Zellij web client may refuse embedding or need its login
+         token first — use the full-screen link once, then reload this page.</p>
+    </section>
+  {{else}}
+    <section>
+      <h2>terminal not configured</h2>
+      <p class="muted">Set <code>SPOTIFYTOOL_TERMINAL_URL</code> to the Zellij web client address
+         (e.g. <code>https://homelab.your-tailnet.ts.net:8082</code>) and restart
+         <code>spotifytool serve</code>. The compose file wires this from <code>.env</code>.</p>
+    </section>
+  {{end}}
+{{else if eq .Page "profile"}}
   <section>
     <h2>taste-profile.md {{if .Saved}}<span class="saved">saved ✓</span>{{end}}</h2>
     <p class="muted">Your edits are ground truth. Loaded at the start of curation sessions and batches.</p>

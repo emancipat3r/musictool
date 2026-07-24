@@ -37,19 +37,28 @@ func (d *Dashboard) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", d.handleIndex)
 	mux.HandleFunc("/profile", d.handleProfile)
+	mux.HandleFunc("/terminal", d.handleTerminal)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	return mux
 }
 
+// Pane names for pageData.Page (which pane the template renders).
+const (
+	pageDashboard = "dashboard"
+	pageProfile   = "profile"
+	pageTerminal  = "terminal"
+)
+
 type pageData struct {
 	Title       string
+	Page        string
 	Stats       store.LibraryStats
 	Signals     store.RecentSignals
 	Batches     []store.Batch
 	PlayHistory []barRow
 	Profile     string
-	ShowProfile bool
 	Saved       bool
+	TerminalURL string
 }
 
 type barRow struct {
@@ -73,12 +82,26 @@ func (d *Dashboard) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 	data := pageData{
 		Title:       "spotifytool",
+		Page:        pageDashboard,
 		Stats:       stats,
 		Signals:     sig,
 		Batches:     batches,
 		PlayHistory: toBars(hist),
+		TerminalURL: d.cfg.TerminalURL,
 	}
 	d.render(w, data)
+}
+
+// handleTerminal renders the service-hatch pane: the Zellij web client for the
+// `claude` session, embedded when SPOTIFYTOOL_TERMINAL_URL is set, with an
+// open-in-tab link (the iframe can be refused by the client's own headers, and
+// full-screen is nicer for real sessions anyway).
+func (d *Dashboard) handleTerminal(w http.ResponseWriter, r *http.Request) {
+	d.render(w, pageData{
+		Title:       "terminal",
+		Page:        pageTerminal,
+		TerminalURL: d.cfg.TerminalURL,
+	})
 }
 
 func (d *Dashboard) handleProfile(w http.ResponseWriter, r *http.Request) {
@@ -98,9 +121,10 @@ func (d *Dashboard) handleProfile(w http.ResponseWriter, r *http.Request) {
 	content, _ := profile.Read(d.cfg.ProfilePath())
 	d.render(w, pageData{
 		Title:       "taste profile",
+		Page:        pageProfile,
 		Profile:     content,
-		ShowProfile: true,
 		Saved:       r.URL.Query().Get("saved") == "1",
+		TerminalURL: d.cfg.TerminalURL,
 	})
 }
 

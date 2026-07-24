@@ -21,6 +21,8 @@ services:
       SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:?set in .env}
       SPOTIFY_REFRESH_TOKEN: ${SPOTIFY_REFRESH_TOKEN:?run `spotifytool auth --print-refresh-token` once}
       LASTFM_API_KEY: ${LASTFM_API_KEY:-}
+      # Where the dashboard's terminal pane finds the Zellij web client.
+      SPOTIFYTOOL_TERMINAL_URL: ${TERMINAL_URL:-https://${LAN_IP:-127.0.0.1}:8082}
       TZ: ${TZ:-America/New_York}
     volumes:
       - state:/data
