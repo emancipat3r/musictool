@@ -98,11 +98,70 @@ func TestScorePartialArtistProbable(t *testing.T) {
 	}
 }
 
+func TestScoreDurationTiebreak(t *testing.T) {
+	// Two exact-title/artist candidates: the studio cut (240s) vs a live
+	// version (390s) that happens to be more popular. With an expected
+	// duration, the studio cut must win.
+	q := model.TrackQuery{Artist: "Iration", Title: "Time Bomb", DurationMs: 240_000}
+	studio := trk("spotify:track:studio", "Time Bomb", "Iration", 60)
+	studio.DurationMs = 241_000
+	live := trk("spotify:track:live", "Time Bomb", "Iration", 65)
+	live.DurationMs = 390_000
+	res := Score(q, []model.Track{live, studio})
+	if res.Bucket != Exact {
+		t.Fatalf("bucket = %s, want exact", res.Bucket)
+	}
+	if res.Chosen.URI != "spotify:track:studio" {
+		t.Fatalf("chose %s; duration tiebreak should prefer the studio cut", res.Chosen.URI)
+	}
+}
+
 // stubSearcher lets us exercise Resolve end-to-end without network.
 type stubSearcher struct{ tracks []model.Track }
 
 func (s stubSearcher) SearchTracks(_ context.Context, _ string, _ int) ([]model.Track, error) {
 	return s.tracks, nil
+}
+
+// memCache is an in-memory resolve.Cache for testing bucket passthrough.
+type memCache struct{ uri, bucket string }
+
+func (m *memCache) GetResolution(_ context.Context, _ string) (string, string, bool) {
+	if m.uri == "" {
+		return "", "", false
+	}
+	return m.uri, m.bucket, true
+}
+func (m *memCache) PutResolution(_ context.Context, _, uri, bucket string) error {
+	m.uri, m.bucket = uri, bucket
+	return nil
+}
+
+func TestResolveCachePreservesBucket(t *testing.T) {
+	// A probable resolution must replay from cache as probable, never as a
+	// silently-upgraded exact.
+	s := stubSearcher{tracks: []model.Track{trk("spotify:track:cov", "Santeria", "Some Cover Band", 30)}}
+	cache := &memCache{}
+	r := New(s, cache)
+	q := model.TrackQuery{Artist: "Sublime", Title: "Santeria"}
+
+	first, err := r.Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Bucket != Probable {
+		t.Fatalf("first bucket = %s, want probable", first.Bucket)
+	}
+	second, err := r.Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Note != "from cache" {
+		t.Fatalf("second resolve should hit cache, note = %q", second.Note)
+	}
+	if second.Bucket != Probable {
+		t.Fatalf("cached bucket = %s, want probable", second.Bucket)
+	}
 }
 
 func TestResolveUsesCacheDeterministically(t *testing.T) {

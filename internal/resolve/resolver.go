@@ -42,9 +42,11 @@ type Searcher interface {
 	SearchTracks(ctx context.Context, query string, limit int) ([]model.Track, error)
 }
 
-// Cache stores prior resolutions so identical inputs are free and stable.
+// Cache stores prior resolutions so identical inputs are free and stable. The
+// bucket is cached alongside the URI so a probable hit replays as probable, not
+// as a false exact.
 type Cache interface {
-	GetResolution(ctx context.Context, key string) (uri string, ok bool)
+	GetResolution(ctx context.Context, key string) (uri, bucket string, ok bool)
 	PutResolution(ctx context.Context, key, uri string, bucket string) error
 }
 
@@ -68,8 +70,12 @@ func cacheKey(q model.TrackQuery) string {
 func (r *Resolver) Resolve(ctx context.Context, q model.TrackQuery) (Resolution, error) {
 	key := cacheKey(q)
 	if r.cache != nil {
-		if uri, ok := r.cache.GetResolution(ctx, key); ok {
-			return Resolution{Query: q, Bucket: Exact, Chosen: &model.Track{URI: uri}, Note: "from cache"}, nil
+		if uri, bucket, ok := r.cache.GetResolution(ctx, key); ok {
+			b := Bucket(bucket)
+			if b != Exact && b != Probable {
+				b = Exact // legacy rows cached before buckets were stored
+			}
+			return Resolution{Query: q, Bucket: b, Chosen: &model.Track{URI: uri}, Note: "from cache"}, nil
 		}
 	}
 
@@ -137,6 +143,18 @@ func Score(q model.TrackQuery, cands []model.Track) Resolution {
 		}
 		if nqAlbum != "" && NormalizeTitle(c.Album.Name) == nqAlbum {
 			s += 8
+		}
+		// Duration tiebreaker: when the caller supplied an expected length, a
+		// candidate within ±3s of it is very likely the same recording (and a
+		// live/extended version is not).
+		if q.DurationMs > 0 && c.DurationMs > 0 {
+			diff := q.DurationMs - c.DurationMs
+			if diff < 0 {
+				diff = -diff
+			}
+			if diff <= 3000 {
+				s += 6
+			}
 		}
 		// Popularity as a small, stable tiebreak (0-100 -> 0-10).
 		s += c.Popularity / 10

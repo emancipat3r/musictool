@@ -23,9 +23,11 @@ fi
 
 echo "$(date -u +%FT%TZ) starting discovery batch for week W${WEEK}" >&2
 
-# --print runs unattended; the MCP tools come from the project .mcp.json.
+# --print runs unattended. MCP wiring comes from mcp-batch.json (the server is
+# in this same container, so the URL is loopback, not the compose hostname).
 # The playlist name convention is enforced in the prompt (Discovery W##).
 WEEK="${WEEK}" claude -p "$(sed "s/{{WEEK}}/${WEEK}/g" "${PROMPT_FILE}")" \
+  --mcp-config /app/batch/mcp-batch.json \
   --permission-mode acceptEdits \
   --allowedTools "mcp__spotify__*" \
   || { echo "$(date -u +%FT%TZ) batch run failed" >&2; exit 1; }

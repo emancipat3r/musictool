@@ -84,8 +84,11 @@ type User struct {
 }
 
 // TrackQuery is a curated pick the resolver must turn into a real URI.
+// DurationMs is optional; when the caller knows the expected length it becomes
+// a scoring tiebreaker between otherwise-equal candidates.
 type TrackQuery struct {
-	Artist string `json:"artist"`
-	Title  string `json:"title"`
-	Album  string `json:"album,omitempty"`
+	Artist     string `json:"artist"`
+	Title      string `json:"title"`
+	Album      string `json:"album,omitempty"`
+	DurationMs int    `json:"duration_ms,omitempty"`
 }

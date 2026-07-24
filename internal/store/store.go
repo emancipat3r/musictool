@@ -185,9 +185,19 @@ func (s *Store) AppendPlays(ctx context.Context, plays []model.PlayEvent) (int, 
 	defer tx.Rollback()
 
 	added := 0
+	now := nowRFC3339()
 	for _, p := range plays {
 		if p.TrackID == "" || p.PlayedAt.IsZero() {
 			continue
+		}
+		// Minimal track row so plays of not-yet-saved tracks still join in
+		// signals (repeats of a discovery pick matter before it's ever liked).
+		// INSERT OR IGNORE: never clobbers a full row from a library sync.
+		if _, err := tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO tracks(id,uri,title,primary_artist,updated_at)
+			 VALUES(?,?,?,?,?)`,
+			p.TrackID, "spotify:track:"+p.TrackID, p.Title, p.Artist, now); err != nil {
+			return added, err
 		}
 		res, err := tx.ExecContext(ctx,
 			`INSERT OR IGNORE INTO recently_played(track_id,played_at) VALUES(?,?)`,
@@ -207,14 +217,16 @@ func (s *Store) AppendPlays(ctx context.Context, plays []model.PlayEvent) (int, 
 
 // --- resolve.Cache implementation ---
 
-// GetResolution returns a cached URI for a resolver key.
-func (s *Store) GetResolution(ctx context.Context, key string) (string, bool) {
+// GetResolution returns a cached URI and its original bucket for a resolver key.
+func (s *Store) GetResolution(ctx context.Context, key string) (string, string, bool) {
 	var uri string
-	err := s.db.QueryRowContext(ctx, `SELECT uri FROM resolution_cache WHERE query_key=?`, key).Scan(&uri)
+	var bucket sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT uri, bucket FROM resolution_cache WHERE query_key=?`, key).Scan(&uri, &bucket)
 	if err != nil {
-		return "", false
+		return "", "", false
 	}
-	return uri, true
+	return uri, bucket.String, true
 }
 
 // PutResolution stores a resolver decision.

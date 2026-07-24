@@ -82,7 +82,9 @@ Prerequisites: Go 1.26+, a Spotify Premium account, a registered Spotify app.
           {"artist":"Stick Figure","title":"Smoke Stack"}]' \
      | ./bin/spotifytool build --name "Test Build" --desc "resolver check"
    ```
-   The result includes the read-back so you can diff intent vs result.
+   The result includes the read-back so you can diff intent vs result. Picks
+   may carry an optional `duration_ms`; candidates within 3 seconds of it get a
+   scoring tiebreak (studio cut vs live version disambiguation).
 
 5. **Run the server** (MCP + dashboard):
    ```sh
@@ -94,6 +96,10 @@ Prerequisites: Go 1.26+, a Spotify Premium account, a registered Spotify app.
    cp .env.example .env             # fill in client id, refresh token, LAN_IP
    docker compose -f deploy/docker-compose.yml up -d --build
    ```
+   The weekly discovery batch needs a logged-in Claude Code: log in once inside
+   the sandbox session and the shared `claude_home` volume carries the
+   credentials to container 2's cron. Opt in to the Agent SDK monthly credit in
+   account settings; leave overflow billing disabled.
 
 ## CLI conventions
 

@@ -114,6 +114,7 @@ type tokenResponse struct {
 type TokenSource struct {
 	clientID string
 	path     string
+	seed     string // SPOTIFY_REFRESH_TOKEN, if provided
 	http     *http.Client
 
 	mu  sync.Mutex
@@ -122,12 +123,15 @@ type TokenSource struct {
 
 // NewTokenSource builds a token source. If seedRefresh is non-empty (the
 // headless SPOTIFY_REFRESH_TOKEN bootstrap) and no cache exists yet, it seeds a
-// token from that refresh token on first use.
+// token from that refresh token on first use. The seed is also kept as a
+// fallback: if the cached refresh token is rejected (revoked, or a restored
+// volume holding a stale pre-rotation token), the seed gets one retry before
+// giving up.
 func NewTokenSource(clientID, path, seedRefresh string, hc *http.Client) *TokenSource {
 	if hc == nil {
 		hc = &http.Client{Timeout: 30 * time.Second}
 	}
-	ts := &TokenSource{clientID: clientID, path: path, http: hc}
+	ts := &TokenSource{clientID: clientID, path: path, seed: seedRefresh, http: hc}
 	if seedRefresh != "" {
 		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 			ts.tok = &Token{RefreshToken: seedRefresh, TokenType: "Bearer"}
@@ -161,12 +165,27 @@ func (ts *TokenSource) AccessToken(ctx context.Context) (string, error) {
 	return ts.tok.AccessToken, nil
 }
 
-// refreshLocked performs the refresh_token grant and persists the result. The
-// caller must hold ts.mu.
+// refreshLocked performs the refresh_token grant and persists the result,
+// retrying once with the env seed if the cached token is rejected. The caller
+// must hold ts.mu.
 func (ts *TokenSource) refreshLocked(ctx context.Context) error {
+	err := ts.grantLocked(ctx, ts.tok.RefreshToken)
+	if err != nil && ts.seed != "" && ts.seed != ts.tok.RefreshToken {
+		logx.Errorf("cached refresh token rejected; retrying with SPOTIFY_REFRESH_TOKEN")
+		if seedErr := ts.grantLocked(ctx, ts.seed); seedErr == nil {
+			return nil
+		}
+		return err // report the primary failure, not the fallback's
+	}
+	return err
+}
+
+// grantLocked runs one refresh_token grant with the given token and persists
+// the (possibly rotated) result on success.
+func (ts *TokenSource) grantLocked(ctx context.Context, refreshToken string) error {
 	form := url.Values{
 		"grant_type":    {"refresh_token"},
-		"refresh_token": {ts.tok.RefreshToken},
+		"refresh_token": {refreshToken},
 		"client_id":     {ts.clientID},
 	}
 	resp, err := ts.postToken(ctx, form)
@@ -174,6 +193,7 @@ func (ts *TokenSource) refreshLocked(ctx context.Context) error {
 		return err
 	}
 	prevRefresh := ts.tok.RefreshToken
+	ts.tok.RefreshToken = refreshToken // base for applyRefreshResponse's keep-if-omitted rule
 	ts.tok.applyRefreshResponse(resp)
 	if err := ts.tok.save(ts.path); err != nil {
 		return apperr.Auth(fmt.Errorf("persist refreshed token: %w", err))

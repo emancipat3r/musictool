@@ -102,6 +102,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 		if res.StatusCode == http.StatusTooManyRequests {
 			wait := retryAfter(res)
 			res.Body.Close()
+			lastErr = fmt.Errorf("rate limited (429, Retry-After %s)", wait)
 			logx.Debugf("429 from %s; sleeping %s", url, wait)
 			if !sleepCtx(ctx, wait) {
 				return apperr.API(ctx.Err())

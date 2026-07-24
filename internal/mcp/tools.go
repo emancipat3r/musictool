@@ -28,9 +28,10 @@ func boolProp(desc string) map[string]any {
 
 // trackQuerySchema is the shared shape for a curated pick.
 var trackQuerySchema = obj(map[string]any{
-	"artist": strProp("primary artist name"),
-	"title":  strProp("track title"),
-	"album":  strProp("optional album name to disambiguate"),
+	"artist":      strProp("primary artist name"),
+	"title":       strProp("track title"),
+	"album":       strProp("optional album name to disambiguate"),
+	"duration_ms": intProp("optional expected duration; ±3s candidates get a scoring tiebreak"),
 }, "artist", "title")
 
 // Tools builds the full MCP tool surface bound to svc.

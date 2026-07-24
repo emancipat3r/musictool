@@ -67,15 +67,38 @@ func TestSchemaAndSavedRoundTrip(t *testing.T) {
 func TestResolutionCacheRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	s := openTemp(t)
-	if _, ok := s.GetResolution(ctx, "k"); ok {
+	if _, _, ok := s.GetResolution(ctx, "k"); ok {
 		t.Fatal("empty cache returned a hit")
 	}
-	if err := s.PutResolution(ctx, "k", "spotify:track:x", "exact"); err != nil {
+	if err := s.PutResolution(ctx, "k", "spotify:track:x", "probable"); err != nil {
 		t.Fatal(err)
 	}
-	uri, ok := s.GetResolution(ctx, "k")
+	uri, bucket, ok := s.GetResolution(ctx, "k")
 	if !ok || uri != "spotify:track:x" {
 		t.Fatalf("cache miss after put: %q %v", uri, ok)
+	}
+	if bucket != "probable" {
+		t.Fatalf("bucket = %q, want probable (cache must not upgrade confidence)", bucket)
+	}
+}
+
+func TestAppendPlaysCreatesMinimalTrackRow(t *testing.T) {
+	ctx := context.Background()
+	s := openTemp(t)
+	added, err := s.AppendPlays(ctx, []model.PlayEvent{
+		{TrackID: "unsaved1", PlayedAt: time.Now(), Title: "New Find", Artist: "Fresh Band"},
+		{TrackID: "unsaved1", PlayedAt: time.Now().Add(time.Minute), Title: "New Find", Artist: "Fresh Band"},
+	})
+	if err != nil || added != 2 {
+		t.Fatalf("AppendPlays = %d, %v", added, err)
+	}
+	// The play of a never-synced track must still be joinable.
+	var title string
+	if err := s.db.QueryRowContext(ctx, `SELECT title FROM tracks WHERE id='unsaved1'`).Scan(&title); err != nil {
+		t.Fatalf("minimal track row missing: %v", err)
+	}
+	if title != "New Find" {
+		t.Fatalf("title = %q", title)
 	}
 }
 

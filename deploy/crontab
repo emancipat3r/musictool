@@ -6,4 +6,4 @@
 
 # Weekly discovery batch (Mondays 07:00): the only Agent SDK credit usage.
 # Delegates to run-batch.sh, which invokes `claude -p` with the batch prompt.
-0 7 * * 1 /app/run-batch.sh >>/data/batch.log 2>&1
+0 7 * * 1 /app/batch/run-batch.sh >>/data/batch.log 2>&1

@@ -6,10 +6,12 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/emancipat3r/spotifytool/internal/apperr"
 	"github.com/emancipat3r/spotifytool/internal/auth"
 	"github.com/emancipat3r/spotifytool/internal/config"
 	"github.com/emancipat3r/spotifytool/internal/lastfm"
@@ -68,37 +70,50 @@ type SyncResult struct {
 // Sync refreshes liked songs, playlist metadata, recently-played history
 // (append-only), and Keepers membership. If full is set, it also refreshes
 // every playlist's track membership (heavier; use for periodic deep syncs).
+//
+// Partial-progress discipline (PRD): each stage commits independently, so a
+// failure after the first successful stage returns exit 3 (partial) with the
+// cause, never pretending nothing landed. Auth failures keep exit 1 so the
+// "run auth" signal stays loud.
 func (s *Service) Sync(ctx context.Context, full bool) (SyncResult, error) {
 	var res SyncResult
+	progressed := false
+	fail := func(err error) (SyncResult, error) {
+		if progressed && apperr.Code(err) != apperr.CodeAuth {
+			return res, apperr.Partial(fmt.Errorf("sync stopped after partial progress: %w", err))
+		}
+		return res, err
+	}
 
 	logx.Infof("sync: fetching liked songs…")
 	saved, err := s.SP.SavedTracks(ctx)
 	if err != nil {
-		return res, err
+		return fail(err)
 	}
 	if err := s.DB.ReplaceSavedTracks(ctx, saved); err != nil {
-		return res, err
+		return fail(err)
 	}
 	res.SavedTracks = len(saved)
+	progressed = true
 
 	logx.Infof("sync: fetching playlists…")
 	pls, err := s.SP.Playlists(ctx)
 	if err != nil {
-		return res, err
+		return fail(err)
 	}
 	if err := s.DB.ReplacePlaylists(ctx, pls); err != nil {
-		return res, err
+		return fail(err)
 	}
 	res.Playlists = len(pls)
 
 	logx.Infof("sync: fetching recently played…")
 	plays, err := s.SP.RecentlyPlayed(ctx)
 	if err != nil {
-		return res, err
+		return fail(err)
 	}
 	added, err := s.DB.AppendPlays(ctx, plays)
 	if err != nil {
-		return res, err
+		return fail(err)
 	}
 	res.NewPlays = added
 
@@ -110,10 +125,10 @@ func (s *Service) Sync(ctx context.Context, full bool) (SyncResult, error) {
 		if full || isKeepers || batchPlaylistIDs[p.ID] {
 			tracks, err := s.SP.PlaylistTracks(ctx, p.ID)
 			if err != nil {
-				return res, err
+				return fail(err)
 			}
 			if err := s.DB.ReplacePlaylistTracks(ctx, p.ID, tracks); err != nil {
-				return res, err
+				return fail(err)
 			}
 			if isKeepers {
 				ids := make([]string, 0, len(tracks))
@@ -121,7 +136,7 @@ func (s *Service) Sync(ctx context.Context, full bool) (SyncResult, error) {
 					ids = append(ids, t.ID)
 				}
 				if err := s.DB.SyncKeepers(ctx, ids); err != nil {
-					return res, err
+					return fail(err)
 				}
 				res.Keepers = len(ids)
 			}

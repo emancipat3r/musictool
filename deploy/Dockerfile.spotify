@@ -15,13 +15,18 @@ RUN go build -ldflags "-s -w -X main.version=${VERSION}" -o /out/spotifytool ./c
 
 # Runtime: small image with busybox cron + CA certs. Alpine gives us crond and a
 # shell for the weekly `claude -p` batch wrapper; the Go binary itself is static.
+# Node + the Claude Code CLI are required for that weekly batch (the only Agent
+# SDK credit consumer); credentials come from the claude_home volume mounted at
+# /root/.claude (shared with the sandbox's login).
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata busybox-suid
+RUN apk add --no-cache ca-certificates tzdata busybox-suid nodejs npm \
+    && npm install -g @anthropic-ai/claude-code \
+    && npm cache clean --force
 WORKDIR /app
 COPY --from=build /out/spotifytool /usr/local/bin/spotifytool
 COPY deploy/crontab /etc/crontabs/root
-COPY deploy/batch/run-batch.sh /app/run-batch.sh
-RUN chmod +x /app/run-batch.sh
+COPY deploy/batch/ /app/batch/
+RUN chmod +x /app/batch/run-batch.sh
 
 # Shared-volume defaults; override in compose if desired.
 ENV SPOTIFYTOOL_DATA_DIR=/data \

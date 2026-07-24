@@ -24,6 +24,9 @@ services:
       TZ: ${TZ:-America/New_York}
     volumes:
       - state:/data
+      # Claude Code credentials for the weekly `claude -p` batch. Shared with
+      # the sandbox's login; the batch bills the Agent SDK credit, not Max.
+      - claude_home:/root/.claude
     networks: [curation]
     # Dashboard on the LAN interface only (MCP stays on the compose network).
     ports:
@@ -45,6 +48,7 @@ services:
       ZELLIJ_SESSION: claude
       ZELLIJ_WEB_PORT: "8082"
     volumes:
+      - ..:/workspace                     # the repo: .mcp.json + CLAUDE.md wiring
       - state:/data                       # shared taste profile / digests (read)
       - claude_home:/root/.claude         # login + session persistence
       - ${ZELLIJ_CERT_DIR:-./certs}:/certs:ro
