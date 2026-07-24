@@ -1,0 +1,23 @@
+# Build artifacts
+/bin/
+/dist/
+/spotifytool
+*.test
+*.out
+
+# Local state (never commit secrets or DB)
+*.db
+*.db-wal
+*.db-shm
+token.json
+.env
+.env.local
+
+# Editor / OS
+.DS_Store
+*.swp
+
+# SSH key dropped for push (never commit)
+/github
+id_ed25519*
+*.pem

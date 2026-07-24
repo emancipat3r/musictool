@@ -1,0 +1,9 @@
+# spotifytool cron (container 2). Times are container-local; set TZ in compose.
+#
+# Hourly: pure-Go library sync (zero model cost) — appends play history so
+# repeat behavior accumulates over time.
+0 * * * * spotifytool sync >/dev/null 2>>/data/sync.log
+
+# Weekly discovery batch (Mondays 07:00): the only Agent SDK credit usage.
+# Delegates to run-batch.sh, which invokes `claude -p` with the batch prompt.
+0 7 * * 1 /app/run-batch.sh >>/data/batch.log 2>&1

@@ -1,0 +1,280 @@
+// Package store is the single writer to the SQLite database. Claude (via MCP
+// tools) and the dashboard both reach the DB only through this engine package —
+// nothing else opens the file for writes.
+package store
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
+	_ "modernc.org/sqlite" // pure-Go driver, preserves CGO_ENABLED=0
+
+	"github.com/emancipat3r/spotifytool/internal/model"
+)
+
+// Store wraps the database handle.
+type Store struct {
+	db *sql.DB
+}
+
+func nowRFC3339() string { return time.Now().UTC().Format(time.RFC3339) }
+
+// Open opens (creating if needed) the SQLite database and applies the schema.
+func Open(path string) (*Store, error) {
+	if dir := filepath.Dir(path); dir != "" {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return nil, err
+		}
+	}
+	dsn := "file:" + path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(on)"
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	// modernc's driver is safe for concurrent readers; keep a single writer.
+	db.SetMaxOpenConns(1)
+	if _, err := db.ExecContext(context.Background(), schemaSQL); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("apply schema: %w", err)
+	}
+	return &Store{db: db}, nil
+}
+
+// Close closes the database.
+func (s *Store) Close() error { return s.db.Close() }
+
+// DB exposes the handle for read-only dashboard queries in the same package.
+func (s *Store) DB() *sql.DB { return s.db }
+
+// upsertTrackTx writes a track and its album/artists inside a transaction.
+func upsertTrackTx(ctx context.Context, tx *sql.Tx, t model.Track) error {
+	now := nowRFC3339()
+	if t.Album.ID != "" {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO albums(id,name,release_date) VALUES(?,?,?)
+			 ON CONFLICT(id) DO UPDATE SET name=excluded.name, release_date=excluded.release_date`,
+			t.Album.ID, t.Album.Name, t.Album.ReleaseDate); err != nil {
+			return err
+		}
+	}
+	var albumID any
+	if t.Album.ID != "" {
+		albumID = t.Album.ID
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO tracks(id,uri,title,album_id,primary_artist,duration_ms,popularity,isrc,updated_at)
+		 VALUES(?,?,?,?,?,?,?,?,?)
+		 ON CONFLICT(id) DO UPDATE SET
+		   uri=excluded.uri, title=excluded.title, album_id=excluded.album_id,
+		   primary_artist=excluded.primary_artist, duration_ms=excluded.duration_ms,
+		   popularity=excluded.popularity, isrc=excluded.isrc, updated_at=excluded.updated_at`,
+		t.ID, t.URI, t.Title, albumID, t.ArtistName(), t.DurationMs, t.Popularity, t.ISRC, now); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM track_artists WHERE track_id=?`, t.ID); err != nil {
+		return err
+	}
+	for i, a := range t.Artists {
+		if a.ID != "" {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO artists(id,name,updated_at) VALUES(?,?,?)
+				 ON CONFLICT(id) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at`,
+				a.ID, a.Name, now); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx,
+				`INSERT OR REPLACE INTO track_artists(track_id,artist_id,position) VALUES(?,?,?)`,
+				t.ID, a.ID, i); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// ReplaceSavedTracks upserts all tracks and rewrites the saved_tracks set.
+func (s *Store) ReplaceSavedTracks(ctx context.Context, saved []model.SavedTrack) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM saved_tracks`); err != nil {
+		return err
+	}
+	for _, st := range saved {
+		if err := upsertTrackTx(ctx, tx, st.Track); err != nil {
+			return err
+		}
+		var savedAt any
+		if !st.SavedAt.IsZero() {
+			savedAt = st.SavedAt.UTC().Format(time.RFC3339)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT OR REPLACE INTO saved_tracks(track_id,saved_at) VALUES(?,?)`,
+			st.Track.ID, savedAt); err != nil {
+			return err
+		}
+	}
+	if err := setMetaTx(ctx, tx, "last_sync", nowRFC3339()); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// ReplacePlaylists rewrites the playlist metadata set.
+func (s *Store) ReplacePlaylists(ctx context.Context, pls []model.Playlist) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM playlists`); err != nil {
+		return err
+	}
+	now := nowRFC3339()
+	for _, p := range pls {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT OR REPLACE INTO playlists(id,name,description,public,owner_id,snapshot_id,track_count,updated_at)
+			 VALUES(?,?,?,?,?,?,?,?)`,
+			p.ID, p.Name, p.Description, boolInt(p.Public), p.OwnerID, p.SnapshotID, p.TrackCount, now); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ReplacePlaylistTracks rewrites one playlist's ordered track membership.
+func (s *Store) ReplacePlaylistTracks(ctx context.Context, playlistID string, tracks []model.Track) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM playlist_tracks WHERE playlist_id=?`, playlistID); err != nil {
+		return err
+	}
+	for i, t := range tracks {
+		if err := upsertTrackTx(ctx, tx, t); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT OR REPLACE INTO playlist_tracks(playlist_id,track_id,position) VALUES(?,?,?)`,
+			playlistID, t.ID, i); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// AppendPlays inserts recently-played events, ignoring duplicates. Returns the
+// number of genuinely new rows.
+func (s *Store) AppendPlays(ctx context.Context, plays []model.PlayEvent) (int, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	added := 0
+	for _, p := range plays {
+		if p.TrackID == "" || p.PlayedAt.IsZero() {
+			continue
+		}
+		res, err := tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO recently_played(track_id,played_at) VALUES(?,?)`,
+			p.TrackID, p.PlayedAt.UTC().Format(time.RFC3339))
+		if err != nil {
+			return added, err
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			added++
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return added, err
+	}
+	return added, nil
+}
+
+// --- resolve.Cache implementation ---
+
+// GetResolution returns a cached URI for a resolver key.
+func (s *Store) GetResolution(ctx context.Context, key string) (string, bool) {
+	var uri string
+	err := s.db.QueryRowContext(ctx, `SELECT uri FROM resolution_cache WHERE query_key=?`, key).Scan(&uri)
+	if err != nil {
+		return "", false
+	}
+	return uri, true
+}
+
+// PutResolution stores a resolver decision.
+func (s *Store) PutResolution(ctx context.Context, key, uri, bucket string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT OR REPLACE INTO resolution_cache(query_key,uri,bucket,created_at) VALUES(?,?,?,?)`,
+		key, uri, bucket, nowRFC3339())
+	return err
+}
+
+// --- artist tags ---
+
+// GetArtistTags returns cached tags and similar-artist names for an artist.
+func (s *Store) GetArtistTags(ctx context.Context, artist string) (tags, similar []string, ok bool) {
+	var tj, sj string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT tags_json, similar_json FROM artist_tags WHERE artist_name=?`, artist).Scan(&tj, &sj)
+	if err != nil {
+		return nil, nil, false
+	}
+	_ = json.Unmarshal([]byte(tj), &tags)
+	_ = json.Unmarshal([]byte(sj), &similar)
+	return tags, similar, true
+}
+
+// PutArtistTags caches tags and similar artists for an artist.
+func (s *Store) PutArtistTags(ctx context.Context, artist string, tags, similar []string) error {
+	tj, _ := json.Marshal(tags)
+	sj, _ := json.Marshal(similar)
+	_, err := s.db.ExecContext(ctx,
+		`INSERT OR REPLACE INTO artist_tags(artist_name,tags_json,similar_json,fetched_at) VALUES(?,?,?,?)`,
+		artist, string(tj), string(sj), nowRFC3339())
+	return err
+}
+
+// --- meta ---
+
+func setMetaTx(ctx context.Context, tx *sql.Tx, key, val string) error {
+	_, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)`, key, val)
+	return err
+}
+
+// SetMeta upserts a bookkeeping value.
+func (s *Store) SetMeta(ctx context.Context, key, val string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)`, key, val)
+	return err
+}
+
+// GetMeta reads a bookkeeping value.
+func (s *Store) GetMeta(ctx context.Context, key string) (string, bool) {
+	var v string
+	if err := s.db.QueryRowContext(ctx, `SELECT value FROM meta WHERE key=?`, key).Scan(&v); err != nil {
+		return "", false
+	}
+	return v, true
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}

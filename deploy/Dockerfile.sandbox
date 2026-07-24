@@ -1,0 +1,41 @@
+# Container 1 — the steering + dev sandbox. Runs Claude Code (interactive,
+# subscription-billed) inside a named Zellij session, exposed to the browser via
+# Zellij's built-in web client. This is the chat interface.
+#
+# NOTE: this is a starting point. If you already have a hardened sandbox image
+# (Sysbox / docker-in-docker for dev containers), base this on that instead and
+# just fold in the Zellij web + entrypoint bits below. Keep container 2 (spotify)
+# OUT of this container's Docker-socket blast radius.
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl git openssh-client tar xz-utils sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+# Node.js (for the Claude Code CLI).
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*
+
+# Claude Code CLI (interactive, Max-subscription billed).
+RUN npm install -g @anthropic-ai/claude-code
+
+# Zellij with the built-in web client (v0.43+). Installed to /usr/local/bin.
+ARG ZELLIJ_VERSION=v0.43.1
+RUN arch="$(uname -m)"; \
+    case "$arch" in \
+      x86_64)  z=zellij-x86_64-unknown-linux-musl.tar.gz ;; \
+      aarch64) z=zellij-aarch64-unknown-linux-musl.tar.gz ;; \
+      *) echo "unsupported arch $arch" && exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/zellij-org/zellij/releases/download/${ZELLIJ_VERSION}/${z}" -o /tmp/z.tgz \
+    && tar -C /usr/local/bin -xzf /tmp/z.tgz zellij && chmod +x /usr/local/bin/zellij && rm /tmp/z.tgz
+
+WORKDIR /workspace
+COPY deploy/sandbox-entrypoint.sh /usr/local/bin/sandbox-entrypoint.sh
+RUN chmod +x /usr/local/bin/sandbox-entrypoint.sh
+
+# Zellij web serves HTTPS on this port; reach it only via Tailscale/LAN.
+EXPOSE 8082
+ENTRYPOINT ["/usr/local/bin/sandbox-entrypoint.sh"]

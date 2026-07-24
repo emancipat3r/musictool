@@ -1,0 +1,65 @@
+# spotifytool — one compose file, two containers, one shared volume. LAN-only.
+#
+# Network posture (hard requirement): nothing is published to the public
+# internet. Services bind to the compose network and, where host access is
+# needed (Zellij web, dashboard), to the LAN interface only. Reach everything
+# via Tailscale into the LAN. No port forwards, no tunnels, no public DNS.
+#
+# The `ports` entries below bind to a LAN address via ${LAN_IP} — set it in
+# .env to your host's LAN/tailnet interface (e.g. 100.x.y.z or 192.168.1.x).
+# Do NOT change these to 0.0.0.0 unless your host firewall already blocks WAN.
+
+services:
+  spotify:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.spotify
+    image: spotifytool:latest
+    container_name: spotifytool-spotify
+    restart: unless-stopped
+    environment:
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:?set in .env}
+      SPOTIFY_REFRESH_TOKEN: ${SPOTIFY_REFRESH_TOKEN:?run `spotifytool auth --print-refresh-token` once}
+      LASTFM_API_KEY: ${LASTFM_API_KEY:-}
+      TZ: ${TZ:-America/New_York}
+    volumes:
+      - state:/data
+    networks: [curation]
+    # Dashboard on the LAN interface only (MCP stays on the compose network).
+    ports:
+      - "${LAN_IP:?set LAN_IP in .env}:8081:8081"   # dashboard (read-only UI)
+    # MCP (8080) is intentionally NOT published — container 1 reaches it over
+    # the compose network at http://spotify:8080/mcp.
+    expose:
+      - "8080"
+
+  sandbox:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.sandbox
+    image: spotifytool-sandbox:latest
+    container_name: spotifytool-sandbox
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-America/New_York}
+      ZELLIJ_SESSION: claude
+      ZELLIJ_WEB_PORT: "8082"
+    volumes:
+      - state:/data                       # shared taste profile / digests (read)
+      - claude_home:/root/.claude         # login + session persistence
+      - ${ZELLIJ_CERT_DIR:-./certs}:/certs:ro
+      # Docker socket for spinning up dev containers (existing sandbox pattern).
+      # Keep the spotify service OUT of this blast radius.
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [curation]
+    ports:
+      - "${LAN_IP:?set LAN_IP in .env}:8082:8082"    # Zellij web (HTTPS)
+    depends_on: [spotify]
+
+networks:
+  curation:
+    driver: bridge
+
+volumes:
+  state:
+  claude_home:

@@ -1,0 +1,40 @@
+# Container 2 — the engine + dashboard. Builds the static spotifytool binary and
+# runs `serve` (MCP over Streamable HTTP + read-only dashboard). Cron drives the
+# hourly sync and weekly discovery batch.
+#
+# CGO_ENABLED=0 keeps the binary static so it runs on a scratch/distroless base.
+
+FROM golang:1.26 AS build
+WORKDIR /src
+ENV CGO_ENABLED=0
+COPY go.mod go.sum* ./
+RUN go mod download
+COPY . .
+ARG VERSION=docker
+RUN go build -ldflags "-s -w -X main.version=${VERSION}" -o /out/spotifytool ./cmd/spotifytool
+
+# Runtime: small image with busybox cron + CA certs. Alpine gives us crond and a
+# shell for the weekly `claude -p` batch wrapper; the Go binary itself is static.
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates tzdata busybox-suid
+WORKDIR /app
+COPY --from=build /out/spotifytool /usr/local/bin/spotifytool
+COPY deploy/crontab /etc/crontabs/root
+COPY deploy/batch/run-batch.sh /app/run-batch.sh
+RUN chmod +x /app/run-batch.sh
+
+# Shared-volume defaults; override in compose if desired.
+ENV SPOTIFYTOOL_DATA_DIR=/data \
+    SPOTIFYTOOL_CONFIG_DIR=/data/config \
+    SPOTIFYTOOL_PROFILE=/data/taste-profile.md \
+    SPOTIFYTOOL_DIGEST_DIR=/data/digests \
+    SPOTIFYTOOL_MCP_ADDR=:8080 \
+    SPOTIFYTOOL_DASH_ADDR=:8081
+
+EXPOSE 8080 8081
+VOLUME ["/data"]
+
+# Start crond (hourly sync + weekly batch) alongside the server.
+COPY deploy/spotify-entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+ENTRYPOINT ["/app/entrypoint.sh"]

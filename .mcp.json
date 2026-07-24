@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "spotify": {
+      "type": "http",
+      "url": "http://spotify:8080/mcp"
+    }
+  }
+}
