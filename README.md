@@ -27,8 +27,9 @@ Two containers, one shared volume, LAN-only (reached via Tailscale):
 - **Container 1, `sandbox`**: Claude Code inside a named Zellij session, exposed
   to the browser via Zellij's built-in web client. This is the chat interface.
 - **Container 2, `spotify`**: `spotifytool serve` (MCP over Streamable HTTP on
-  the compose network) plus the read-only dashboard. Cron runs the hourly sync
-  and the weekly discovery batch.
+  the compose network) plus the read-only dashboard. Cron runs the hourly sync.
+  Pure Go, no model invocations: all Claude usage lives in container 1's
+  interactive session on the Max subscription.
 
 Nothing is published to the public internet. See `deploy/docker-compose.yml`.
 
@@ -47,7 +48,8 @@ internal/
   dashboard/            read-only web UI + taste-profile editor
   profile/              taste-profile.md read/write
   model/ config/ apperr/ logx/    shared types, paths, exit codes, logging
-deploy/                 Dockerfiles, compose, cron, batch prompt, entrypoints
+.claude/commands/       /discovery-batch (interactive weekly batch playbook)
+deploy/                 Dockerfiles, compose, cron, entrypoints
 ```
 
 ## Quick start
@@ -96,10 +98,11 @@ Prerequisites: Go 1.26+, a Spotify Premium account, a registered Spotify app.
    cp .env.example .env             # fill in client id, refresh token, LAN_IP
    docker compose -f deploy/docker-compose.yml up -d --build
    ```
-   The weekly discovery batch needs a logged-in Claude Code: log in once inside
-   the sandbox session and the shared `claude_home` volume carries the
-   credentials to container 2's cron. Opt in to the Agent SDK monthly credit in
-   account settings; leave overflow billing disabled.
+   All Claude usage is interactive and bills the Max subscription: log in once
+   inside the sandbox session and you're set. There is no unattended model cron
+   and no API-key or Agent SDK credit usage anywhere in the stack. The weekly
+   discovery batch is the `/discovery-batch` command, run from the session
+   (terminal, Zellij web, or mobile attach).
 
 ## CLI conventions
 
@@ -128,8 +131,9 @@ compact structured fields, never full Spotify objects.
 - M3 serve + compose (MCP HTTP, two-container compose, Zellij web wiring): done,
   pending live verification on the homelab.
 - M4 feedback layer (hourly sync cron, play history, Keepers, signals): done.
-- M5 taste + batch (profile, weekly batch, dashboard v1): done; batch prompt and
-  cron wired, dashboard live.
+- M5 taste + batch (profile, weekly batch, dashboard v1): done; the batch is the
+  interactive /discovery-batch command (subscription-billed, no unattended model
+  cron by owner's choice), dashboard live.
 
 Live Spotify verification (the human-in-the-loop steps: app registration, first
 auth, confirming a test playlist lands with no substitutions) is required to

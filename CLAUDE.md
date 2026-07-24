@@ -44,9 +44,10 @@ to be the taste engine; Spotify plays; playlists are the persistence layer.
 ## Discovery batches (convention)
 
 - Naming: `Discovery W##` (ISO week), rationale in the playlist description.
-- The unattended weekly batch is driven by cron (`run-batch.sh` → `claude -p`)
-  and records itself via `record_batch_label`. In interactive sessions you can
-  build ad-hoc playlists any time; only the weekly run counts as a "batch."
+- The weekly batch runs interactively via the `/discovery-batch` command in this
+  session (subscription-billed; there is no unattended model cron by design).
+  It records itself via `record_batch_label`. Ad-hoc playlist builds any time
+  are fine; only a `/discovery-batch` run counts as a "batch."
 - Ten tracks ≈ one commute; three sticking is a good week.
 
 ## Discovery inputs (API reality)

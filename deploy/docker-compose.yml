@@ -26,9 +26,6 @@ services:
       TZ: ${TZ:-America/New_York}
     volumes:
       - state:/data
-      # Claude Code credentials for the weekly `claude -p` batch. Shared with
-      # the sandbox's login; the batch bills the Agent SDK credit, not Max.
-      - claude_home:/root/.claude
     networks: [curation]
     # Dashboard on the LAN interface only (MCP stays on the compose network).
     ports:
