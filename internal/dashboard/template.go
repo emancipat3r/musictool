@@ -7,7 +7,7 @@ const pageTemplate = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{.Title}} — spotifytool</title>
+<title>{{.Title}} · spotifytool</title>
 <style>
   :root {
     --bg: #282828; --bg1: #3c3836; --bg2: #504945;
@@ -18,10 +18,13 @@ const pageTemplate = `<!doctype html>
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg);
          font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  /* Links are always accent-on-dark; never browser-default blue. */
+  a, a:visited { color: var(--accent); }
+  a:hover { color: var(--fg); }
   header { border-bottom: 2px solid var(--accent); padding: 1rem 1.5rem;
            display: flex; align-items: center; gap: 1.5rem; }
   header h1 { margin: 0; font-size: 1.2rem; color: var(--accent); letter-spacing: .04em; }
-  header a { color: var(--fg-dim); text-decoration: none; }
+  header a, header a:visited { color: var(--fg-dim); text-decoration: none; }
   header a:hover, header a.active { color: var(--accent); }
   main { max-width: 960px; margin: 0 auto; padding: 1.5rem; }
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; }
@@ -48,7 +51,6 @@ const pageTemplate = `<!doctype html>
   .pill { display:inline-block; background: var(--bg2); border-radius: 999px;
           padding: .05rem .5rem; font-size: .75rem; color: var(--fg-dim); }
   main.wide { max-width: none; }
-  main a { color: var(--accent); }
   .term iframe { width: 100%; height: calc(100vh - 180px); border: 1px solid var(--bg2);
                  border-radius: 8px; background: #1d2021; }
   code { background: var(--bg1); border-radius: 4px; padding: .1rem .35rem;
@@ -73,14 +75,14 @@ const pageTemplate = `<!doctype html>
     <section class="term">
       <h2>claude session
         <span class="muted" style="font-size:.8rem;text-transform:none">
-          same conversation as <code>zellij attach</code> over Tailscale SSH and the mobile app —
+          same conversation as <code>zellij attach</code> over Tailscale SSH and the mobile app ·
           <a href="{{.TerminalURL}}" target="_blank" rel="noopener">open full-screen ↗</a>
         </span>
       </h2>
       <iframe src="{{.TerminalURL}}" title="Zellij web client (claude session)"
               allow="clipboard-read; clipboard-write"></iframe>
       <p class="muted">Blank frame? The Zellij web client may refuse embedding or need its login
-         token first — use the full-screen link once, then reload this page.</p>
+         token first: use the full-screen link once, then reload this page.</p>
     </section>
   {{else}}
     <section>
@@ -114,7 +116,7 @@ const pageTemplate = `<!doctype html>
   </p>
 
   <section>
-    <h2>plays — last 30 days</h2>
+    <h2>plays · last 30 days</h2>
     {{if .PlayHistory}}
       {{range .PlayHistory}}
         <div class="bar-row">
@@ -123,7 +125,7 @@ const pageTemplate = `<!doctype html>
           <span class="val">{{.Count}}</span>
         </div>
       {{end}}
-    {{else}}<p class="muted">No play history yet — accumulates hourly once sync runs.</p>{{end}}
+    {{else}}<p class="muted">No play history yet; accumulates hourly once sync runs.</p>{{end}}
   </section>
 
   <section>
