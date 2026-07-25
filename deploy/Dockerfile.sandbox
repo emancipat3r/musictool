@@ -11,7 +11,7 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git openssh-client tar xz-utils sudo \
+      ca-certificates curl git openssh-client tar xz-utils sudo openssl \
     && rm -rf /var/lib/apt/lists/*
 
 # Node.js (for the Claude Code CLI).

@@ -50,6 +50,9 @@ services:
       - ..:/workspace                     # the repo: .mcp.json + CLAUDE.md wiring
       - state:/data                       # shared taste profile / digests (read)
       - claude_home:/root/.claude         # login + session persistence
+      # Optional: mount real certs (e.g. `tailscale cert` output). If absent,
+      # the entrypoint generates a self-signed pair persisted on the state
+      # volume (one-time browser warning).
       - ${ZELLIJ_CERT_DIR:-./certs}:/certs:ro
       # Docker socket for spinning up dev containers (existing sandbox pattern).
       # Keep the spotify service OUT of this blast radius.
