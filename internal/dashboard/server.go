@@ -8,9 +8,6 @@ import (
 	"context"
 	"html/template"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/emancipat3r/spotifytool/internal/config"
@@ -62,8 +59,6 @@ type pageData struct {
 	Profile     string
 	Saved       bool
 	TerminalURL string
-	// TerminalToken is the captured Zellij web login token (empty if absent).
-	TerminalToken string
 }
 
 type barRow struct {
@@ -97,25 +92,14 @@ func (d *Dashboard) handleIndex(w http.ResponseWriter, r *http.Request) {
 	d.render(w, data)
 }
 
-// handleTerminal renders the service-hatch pane: the Zellij web client for the
-// `claude` session, embedded when SPOTIFYTOOL_TERMINAL_URL is set, with an
-// open-in-tab link (the iframe can be refused by the client's own headers, and
-// full-screen is nicer for real sessions anyway).
-//
-// The Zellij login token captured by the sandbox entrypoint (shared volume) is
-// displayed alongside. Zellij's web auth cannot be disabled; surfacing the
-// token here inside the LAN/tailnet perimeter makes login a one-time
-// copy-paste per device (check "remember me").
+// handleTerminal renders the service-hatch pane: the terminal at
+// SPOTIFYTOOL_TERMINAL_URL (normally the auth-injecting proxy, so no login is
+// ever shown), embedded with an open-in-tab link.
 func (d *Dashboard) handleTerminal(w http.ResponseWriter, r *http.Request) {
-	token := ""
-	if b, err := os.ReadFile(filepath.Join(d.cfg.DataDir, "zellij-web-token.txt")); err == nil {
-		token = strings.TrimSpace(string(b))
-	}
 	d.render(w, pageData{
-		Title:         "terminal",
-		Page:          pageTerminal,
-		TerminalURL:   d.cfg.TerminalURL,
-		TerminalToken: token,
+		Title:       "terminal",
+		Page:        pageTerminal,
+		TerminalURL: d.cfg.TerminalURL,
 	})
 }
 

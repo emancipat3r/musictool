@@ -90,7 +90,9 @@ Prerequisites: Go 1.26+, a Spotify Premium account, a registered Spotify app.
 
 5. **Run the server** (MCP + dashboard):
    ```sh
-   ./bin/spotifytool serve          # MCP :8080/mcp, dashboard :8081
+   ./bin/spotifytool serve          # MCP :8080/mcp, dashboard :8081, and (when
+                                    # SPOTIFYTOOL_ZELLIJ_UPSTREAM is set) an
+                                    # auth-injecting zellij terminal proxy :8083
    ```
 
 6. **Deploy** the full two-container stack. The env file lives next to the

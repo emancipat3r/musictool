@@ -6,6 +6,7 @@ import (
 	"flag"
 	"net"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/emancipat3r/spotifytool/internal/config"
@@ -26,6 +27,9 @@ func cmdServe(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	mcpAddr := fs.String("mcp-addr", envOr("SPOTIFYTOOL_MCP_ADDR", ":8080"), "MCP listen address")
 	dashAddr := fs.String("dash-addr", envOr("SPOTIFYTOOL_DASH_ADDR", ":8081"), "dashboard listen address")
+	termAddr := fs.String("term-addr", envOr("SPOTIFYTOOL_TERMPROXY_ADDR", ":8083"), "terminal proxy listen address")
+	zellijUpstream := fs.String("zellij-upstream", envOr("SPOTIFYTOOL_ZELLIJ_UPSTREAM", ""),
+		"zellij web URL to auth-proxy (e.g. https://sandbox:8082); empty disables the terminal proxy")
 	noDash := fs.Bool("no-dashboard", false, "do not serve the dashboard")
 	noMCP := fs.Bool("no-mcp", false, "do not serve MCP")
 	verbose := fs.Bool("v", false, "verbose")
@@ -59,6 +63,17 @@ func cmdServe(ctx context.Context, args []string) error {
 		srv := &http.Server{Addr: *dashAddr, Handler: d.Handler(), ReadHeaderTimeout: 10 * time.Second}
 		servers = append(servers, srv)
 		go serveHTTP(srv, "dashboard", *dashAddr)
+	}
+	if *zellijUpstream != "" {
+		tokenPath := filepath.Join(cfg.DataDir, "zellij-web-token.txt")
+		tp, err := dashboard.NewTermProxy(*zellijUpstream, tokenPath)
+		if err != nil {
+			return err
+		}
+		// No ReadHeaderTimeout here: long-lived terminal WebSockets.
+		srv := &http.Server{Addr: *termAddr, Handler: tp}
+		servers = append(servers, srv)
+		go serveHTTP(srv, "terminal proxy", *termAddr)
 	}
 	if len(servers) == 0 {
 		return errors.New("nothing to serve: both --no-mcp and --no-dashboard set")

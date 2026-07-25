@@ -81,13 +81,8 @@ const pageTemplate = `<!doctype html>
       </h2>
       <iframe src="{{.TerminalURL}}" title="Zellij web client (claude session)"
               allow="clipboard-read; clipboard-write"></iframe>
-      {{if .TerminalToken}}
-      <p class="muted">login token: <code>{{.TerminalToken}}</code> · paste once per device and
-         check "remember me".</p>
-      {{else}}
-      <p class="muted">Blank frame? The Zellij web client may refuse embedding or need its login
-         token first: use the full-screen link once, then reload this page.</p>
-      {{end}}
+      <p class="muted">Auth is handled by the stack (token login injected by the proxy); if the
+         frame errors, check that the sandbox container is up.</p>
     </section>
   {{else}}
     <section>
