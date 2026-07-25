@@ -36,11 +36,15 @@ fi
 
 # Layout: first pane runs Claude Code in the mounted repo (/workspace), which
 # carries .mcp.json (spotify MCP wiring) and CLAUDE.md (workflow doc).
+# Owner's defaults: permission prompts off (contained, LAN-only sandbox; needs
+# IS_SANDBOX=1 since we run as root) and Remote Control on, so the session is
+# drivable from the Claude mobile app as "spotifytool".
 if [[ ! -f "${ZDIR}/layouts/claude.kdl" ]]; then
   cat > "${ZDIR}/layouts/claude.kdl" <<'KDL'
 layout {
     pane {
         command "claude"
+        args "--allow-dangerously-skip-permissions" "--dangerously-skip-permissions" "--remote-control" "spotifytool"
         cwd "/workspace"
     }
     pane size=1 borderless=true {

@@ -33,6 +33,9 @@ RUN arch="$(uname -m)"; \
     && tar -C /usr/local/bin -xzf /tmp/z.tgz zellij && chmod +x /usr/local/bin/zellij && rm /tmp/z.tgz
 
 WORKDIR /workspace
+# Required for --dangerously-skip-permissions when running as root: declares
+# this a contained sandbox environment to Claude Code.
+ENV IS_SANDBOX=1
 COPY deploy/sandbox-entrypoint.sh /usr/local/bin/sandbox-entrypoint.sh
 RUN chmod +x /usr/local/bin/sandbox-entrypoint.sh
 
