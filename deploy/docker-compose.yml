@@ -50,6 +50,7 @@ services:
       - ..:/workspace                     # the repo: .mcp.json + CLAUDE.md wiring
       - state:/data                       # shared taste profile / digests (read)
       - claude_home:/root/.claude         # login + session persistence
+      - zellij_data:/root/.local/share/zellij  # web tokens survive rebuilds
       # Optional: mount real certs (e.g. `tailscale cert` output). If absent,
       # the entrypoint generates a self-signed pair persisted on the state
       # volume (one-time browser warning).
@@ -69,3 +70,4 @@ networks:
 volumes:
   state:
   claude_home:
+  zellij_data:

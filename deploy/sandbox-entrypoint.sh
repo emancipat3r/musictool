@@ -73,13 +73,20 @@ ensure_session() {
 }
 ensure_session
 
-# Login token: mint one on first boot and print it. It is shown once and
-# cannot be retrieved later; grab it from `docker logs` and keep it. Extra
-# tokens can be minted any time with: zellij web --create-token
-if ! zellij web --list-tokens 2>/dev/null | grep -q token_; then
-  echo "=== zellij web login token (save this; shown once) ===" >&2
-  zellij web --create-token >&2 || true
-  echo "=======================================================" >&2
+# Login token: mint one and capture it to the shared volume so it is always
+# retrievable (dashboard terminal pane displays it; `cat` works too). Zellij
+# only shows a token at mint time, so the capture file is the source of truth.
+# The token store (~/.local/share/zellij) is volume-mounted in compose, so
+# minted tokens and browser remember-me cookies survive rebuilds.
+TOKEN_FILE=/data/zellij-web-token.txt
+if [[ ! -s "$TOKEN_FILE" ]] || ! zellij web --list-tokens 2>/dev/null | grep -q token_; then
+  token=$(zellij web --create-token 2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f-]{27}' | head -1 || true)
+  if [[ -n "$token" ]]; then
+    (umask 077 && printf '%s\n' "$token" > "$TOKEN_FILE")
+    echo "zellij web login token minted; stored at ${TOKEN_FILE}" >&2
+  else
+    echo "WARNING: could not mint/capture a zellij web token" >&2
+  fi
 fi
 
 echo "zellij web serving on https://0.0.0.0:${WEB_PORT} (session: ${SESSION})" >&2
