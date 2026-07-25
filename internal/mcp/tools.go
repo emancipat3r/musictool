@@ -11,8 +11,13 @@ import (
 	"github.com/emancipat3r/spotifytool/internal/spotify"
 )
 
-// obj is a small helper for building JSON-Schema fragments.
+// obj is a small helper for building JSON-Schema fragments. A nil props map
+// must become {} — marshaling nil to "properties": null makes strict MCP
+// clients (Claude Code included) reject the entire tools/list.
 func obj(props map[string]any, required ...string) map[string]any {
+	if props == nil {
+		props = map[string]any{}
+	}
 	m := map[string]any{"type": "object", "properties": props}
 	if len(required) > 0 {
 		m["required"] = required
