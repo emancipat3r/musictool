@@ -93,11 +93,11 @@ Prerequisites: Go 1.26+, a Spotify Premium account, a registered Spotify app.
    ./bin/spotifytool serve          # MCP :8080/mcp, dashboard :8081
    ```
 
-6. **Deploy** the full two-container stack:
+6. **Deploy** the full two-container stack. The env file lives next to the
+   compose file so compose auto-loads it:
    ```sh
-   cp .env.example .env             # fill in client id, refresh token, LAN_IP
-   # --env-file is required: compose only auto-reads .env from deploy/, not the root
-   docker compose --env-file .env -f deploy/docker-compose.yml up -d --build
+   cp .env.example deploy/.env      # fill in client id, refresh token, LAN_IP
+   docker compose -f deploy/docker-compose.yml up -d --build
    ```
    All Claude usage is interactive and bills the Max subscription: log in once
    inside the sandbox session and you're set. There is no unattended model cron
