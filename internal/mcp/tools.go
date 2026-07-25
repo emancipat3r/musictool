@@ -107,7 +107,7 @@ func Tools(svc *service.Service) []Tool {
 				"title":  strProp("title filter"),
 				"album":  strProp("album filter"),
 				"query":  strProp("raw query if you must (discouraged)"),
-				"limit":  intProp("max results (default 20)"),
+				"limit":  intProp("max results (hard API cap of 10)"),
 			}),
 			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
 				var a struct {

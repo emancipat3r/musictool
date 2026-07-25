@@ -116,6 +116,98 @@ func TestScoreDurationTiebreak(t *testing.T) {
 	}
 }
 
+// Live-data regression: "Time Bomb" query vs studio + live + acoustic
+// candidates. Version-tag stripping makes all three exact after normalization;
+// the verbatim bonus and variant penalty must break the tie toward the studio
+// cut. (Search results carry no popularity since Feb 2026.)
+func TestScoreVerbatimBeatsVariants(t *testing.T) {
+	q := model.TrackQuery{Artist: "Iration", Title: "Time Bomb"}
+	studio := trk("spotify:track:studio", "Time Bomb", "Iration", 0)
+	live := trk("spotify:track:live", "Time Bomb - Live", "Iration", 0)
+	acoustic := trk("spotify:track:acoustic", "Time Bomb - Acoustic", "Iration", 0)
+	res := Score(q, []model.Track{live, acoustic, studio})
+	if res.Bucket != Exact {
+		t.Fatalf("bucket = %s (%s), want exact", res.Bucket, res.Note)
+	}
+	if res.Chosen.URI != "spotify:track:studio" {
+		t.Fatalf("chose %s, want studio cut", res.Chosen.URI)
+	}
+}
+
+// Asking for the acoustic version must not penalize acoustic candidates.
+func TestScoreWantedVariantNotPenalized(t *testing.T) {
+	q := model.TrackQuery{Artist: "Iration", Title: "Time Bomb - Acoustic"}
+	studio := trk("spotify:track:studio", "Time Bomb", "Iration", 0)
+	acoustic := trk("spotify:track:acoustic", "Time Bomb - Acoustic", "Iration", 0)
+	res := Score(q, []model.Track{studio, acoustic})
+	if res.Bucket != Exact || res.Chosen.URI != "spotify:track:acoustic" {
+		t.Fatalf("bucket=%s chosen=%v, want exact acoustic", res.Bucket, res.Chosen)
+	}
+}
+
+// Live-data regression: Gang Starr "Mass Appeal" appears on three releases,
+// all the same recording (same ISRC). That is one recording, not ambiguity;
+// prefer the earliest release deterministically.
+func TestScoreSameISRCDedupe(t *testing.T) {
+	q := model.TrackQuery{Artist: "Gang Starr", Title: "Mass Appeal"}
+	mk := func(uri, album, date string) model.Track {
+		tr := trk(uri, "Mass Appeal", "Gang Starr", 0)
+		tr.ISRC = "USCH39400036"
+		tr.Album = model.Album{Name: album, ReleaseDate: date}
+		return tr
+	}
+	cands := []model.Track{
+		mk("spotify:track:comp2017", "Throwback Tunes: Hip Hop", "2017-09-01"),
+		mk("spotify:track:fullclip", "Full Clip: A Decade Of Gang Starr", "1999-07-13"),
+		mk("spotify:track:la2020", "L.A. Originals", "2020-12-04"),
+	}
+	res := Score(q, cands)
+	if res.Bucket != Exact {
+		t.Fatalf("bucket = %s (%s), want exact via ISRC dedupe", res.Bucket, res.Note)
+	}
+	if res.Chosen.URI != "spotify:track:fullclip" {
+		t.Fatalf("chose %s, want earliest release", res.Chosen.URI)
+	}
+	// Distinct ISRCs with no dominant group must still be ambiguous.
+	cands[0].ISRC = "DIFFERENT"
+	res2 := Score(q, cands)
+	if res2.Bucket != Ambiguous {
+		t.Fatalf("distinct ISRCs should stay ambiguous, got %s", res2.Bucket)
+	}
+}
+
+// Live regression (exact candidate set from the real API): 8 compilations of
+// the same recording plus one clean edit with its own ISRC. The dominant group
+// wins and the earliest release (the original album) is chosen.
+func TestScoreDominantISRCOutvotesCleanEdit(t *testing.T) {
+	q := model.TrackQuery{Artist: "Gang Starr", Title: "Mass Appeal"}
+	mk := func(uri, isrc, album, date string) model.Track {
+		tr := trk(uri, "Mass Appeal", "Gang Starr", 0)
+		tr.ISRC = isrc
+		tr.Album = model.Album{Name: album, ReleaseDate: date}
+		return tr
+	}
+	const main = "USCH39400036"
+	cands := []model.Track{
+		mk("spotify:track:hte", main, "Hard To Earn", "1994-03-08"),
+		mk("spotify:track:clean", "USCH39400035", "Mass Appeal: The Best Of Gang Starr", "2006-12-26"),
+		mk("spotify:track:fullclip", main, "Full Clip: A Decade Of Gang Starr", "1999-07-13"),
+		mk("spotify:track:bestof", main, "Mass Appeal: The Best Of (Explicit)", "2006-01-01"),
+		mk("spotify:track:nyhh", main, "New York Hip Hop", "2021-03-19"),
+		mk("spotify:track:tt", main, "Throwback Tunes: Hip Hop", "2017-09-01"),
+		mk("spotify:track:thmt", main, "Throwback Hip Hop Mix Tape", "2018-11-09"),
+		mk("spotify:track:gmm", main, "Good Morning Music", "2019-11-15"),
+		mk("spotify:track:lao", main, "L.A. Originals", "2020-12-04"),
+	}
+	res := Score(q, cands)
+	if res.Bucket != Exact {
+		t.Fatalf("bucket = %s (%s), want exact", res.Bucket, res.Note)
+	}
+	if res.Chosen.URI != "spotify:track:hte" {
+		t.Fatalf("chose %s, want the 1994 original album", res.Chosen.URI)
+	}
+}
+
 // stubSearcher lets us exercise Resolve end-to-end without network.
 type stubSearcher struct{ tracks []model.Track }
 

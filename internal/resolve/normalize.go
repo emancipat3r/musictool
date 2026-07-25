@@ -44,6 +44,42 @@ func NormalizeArtist(s string) string {
 	return finishNormalize(strings.ToLower(strings.TrimSpace(s)))
 }
 
+// NormalizeVerbatim lowercases and strips punctuation/diacritics but keeps
+// feat credits and version tags. Used to tell a verbatim title match ("Time
+// Bomb") apart from a tag-stripped one ("Time Bomb - Live") after both
+// normalize equal under NormalizeTitle.
+func NormalizeVerbatim(s string) string {
+	return finishNormalize(strings.ToLower(strings.TrimSpace(s)))
+}
+
+// variantWords are performance-variant markers: a candidate carrying one the
+// query didn't ask for is almost certainly a different recording of the song.
+// Remaster tags are deliberately absent (same recording).
+var variantWords = []string{
+	"live", "acoustic", "instrumental", "unplugged", "demo", "remix",
+	"karaoke", "cover", "reprise", "sped up", "slowed", "medley",
+}
+
+// HasUnwantedVariant reports whether the candidate title carries a
+// performance-variant marker that the query title does not.
+func HasUnwantedVariant(queryTitle, candidateTitle string) bool {
+	q := NormalizeVerbatim(queryTitle)
+	c := NormalizeVerbatim(candidateTitle)
+	for _, w := range variantWords {
+		if containsWord(c, w) && !containsWord(q, w) {
+			return true
+		}
+	}
+	return false
+}
+
+// containsWord reports whether s contains w as a whole word (both already
+// space-normalized).
+func containsWord(s, w string) bool {
+	return s == w || strings.HasPrefix(s, w+" ") || strings.HasSuffix(s, " "+w) ||
+		strings.Contains(s, " "+w+" ")
+}
+
 func finishNormalize(s string) string {
 	s = stripDiacritics(s)
 	s = rePunct.ReplaceAllString(s, " ")

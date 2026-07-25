@@ -8,26 +8,27 @@ import (
 	"github.com/emancipat3r/spotifytool/internal/model"
 )
 
-// CreatePlaylist creates an empty playlist owned by userID and returns it.
-func (c *Client) CreatePlaylist(ctx context.Context, userID, name, description string, public bool) (model.Playlist, error) {
+// CreatePlaylist creates an empty playlist for the current user and returns it.
+// Feb 2026: POST /users/{id}/playlists returns 403; POST /me/playlists is the
+// live endpoint (verified 2026-07-25), so no user id is needed.
+func (c *Client) CreatePlaylist(ctx context.Context, name, description string, public bool) (model.Playlist, error) {
 	body := map[string]any{
 		"name":        name,
 		"description": description,
 		"public":      public,
 	}
 	var p apiPlaylist
-	path := fmt.Sprintf("/users/%s/playlists", url.PathEscape(userID))
-	if err := c.do(ctx, "POST", path, body, &p); err != nil {
+	if err := c.do(ctx, "POST", "/me/playlists", body, &p); err != nil {
 		return model.Playlist{}, err
 	}
 	return p.toModel(), nil
 }
 
 // AddTracks appends track URIs to a playlist in batches of 100 (the API max per
-// request). Order is preserved.
+// request), via the /items endpoint. Order is preserved.
 func (c *Client) AddTracks(ctx context.Context, playlistID string, uris []string) error {
 	const batch = 100
-	path := fmt.Sprintf("/playlists/%s/tracks", url.PathEscape(playlistID))
+	path := fmt.Sprintf("/playlists/%s/items", url.PathEscape(playlistID))
 	for i := 0; i < len(uris); i += batch {
 		end := i + batch
 		if end > len(uris) {
@@ -44,7 +45,7 @@ func (c *Client) AddTracks(ctx context.Context, playlistID string, uris []string
 // ReplaceTracks sets a playlist's contents to exactly uris (first ≤100 via PUT,
 // remainder appended). Used when rebuilding a playlist deterministically.
 func (c *Client) ReplaceTracks(ctx context.Context, playlistID string, uris []string) error {
-	path := fmt.Sprintf("/playlists/%s/tracks", url.PathEscape(playlistID))
+	path := fmt.Sprintf("/playlists/%s/items", url.PathEscape(playlistID))
 	first := uris
 	if len(first) > 100 {
 		first = uris[:100]

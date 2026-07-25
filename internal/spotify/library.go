@@ -79,20 +79,21 @@ func (c *Client) PlaylistByID(ctx context.Context, id string) (model.Playlist, e
 	return p.toModel(), nil
 }
 
-// PlaylistTracks pages through a playlist's tracks in order.
+// PlaylistTracks pages through a playlist's tracks in order. Uses the /items
+// endpoint (Feb 2026: /playlists/{id}/tracks returns 403; live-verified).
 func (c *Client) PlaylistTracks(ctx context.Context, id string) ([]model.Track, error) {
 	out := []model.Track{}
-	next := fmt.Sprintf("/playlists/%s/tracks?limit=100", url.PathEscape(id))
+	next := fmt.Sprintf("/playlists/%s/items?limit=100", url.PathEscape(id))
 	for next != "" {
 		var page apiPaging[apiPlaylistTrackItem]
 		if err := c.do(ctx, "GET", next, nil, &page); err != nil {
 			return out, err
 		}
 		for _, it := range page.Items {
-			if it.IsLocal || it.Track.ID == "" {
+			if it.IsLocal || it.Item.ID == "" {
 				continue
 			}
-			out = append(out, it.Track.toModel())
+			out = append(out, it.Item.toModel())
 		}
 		next = page.Next
 	}

@@ -233,10 +233,17 @@ func cmdBuild(ctx context.Context, args []string) error {
 	if emitErr := emit(res); emitErr != nil {
 		return emitErr
 	}
-	// A build that didn't verify is a partial success (exit 3) so cron/agents
-	// can notice.
-	if res != nil && !res.ReadbackMatches {
-		return apperr.Partial(fmt.Errorf("read-back did not match resolved URIs (%d not found)", len(res.NotFound)))
+	// A build that didn't fully land is a partial success (exit 3) so
+	// cron/agents can notice: read-back mismatch, unresolvable picks, or
+	// ambiguous picks awaiting a caller decision.
+	if res != nil {
+		switch {
+		case !res.ReadbackMatches:
+			return apperr.Partial(fmt.Errorf("read-back did not match resolved URIs"))
+		case len(res.NotFound) > 0 || len(res.Ambiguous) > 0:
+			return apperr.Partial(fmt.Errorf("%d of %d picks did not land (%d not found, %d ambiguous)",
+				res.Requested-res.Added, res.Requested, len(res.NotFound), len(res.Ambiguous)))
+		}
 	}
 	return nil
 }

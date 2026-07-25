@@ -1,0 +1,263 @@
+{
+  "playlist_id": "3NEZ59PCAahspP1KgQ73ky",
+  "playlist_uri": "spotify:playlist:3NEZ59PCAahspP1KgQ73ky",
+  "name": "spotifytool test build",
+  "requested": 5,
+  "added": 4,
+  "resolutions": [
+    {
+      "query": {
+        "artist": "Stick Figure",
+        "title": "World on Fire"
+      },
+      "bucket": "exact",
+      "chosen": {
+        "id": "7Clj1VaR0Vww6bUuM3nBk1",
+        "uri": "spotify:track:7Clj1VaR0Vww6bUuM3nBk1",
+        "title": "World on Fire (with Slightly Stoopid)",
+        "artists": [
+          {
+            "id": "5SXEylV07TC57eanSxxg4R",
+            "name": "Stick Figure"
+          },
+          {
+            "id": "6MxlVTY6PmY8Nyn16fvxtb",
+            "name": "Slightly Stoopid"
+          }
+        ],
+        "album": {
+          "id": "19jEg2Oa1eTEYFnOlKlIYQ",
+          "name": "World on Fire (with Slightly Stoopid)",
+          "release_date": "2018-06-08"
+        },
+        "duration_ms": 240028,
+        "isrc": "TCADQ1844467"
+      },
+      "note": "same recording across releases (ISRC TCADQ1844467); chose earliest",
+      "score": 200
+    },
+    {
+      "query": {
+        "artist": "Iration",
+        "title": "Time Bomb"
+      },
+      "bucket": "exact",
+      "chosen": {
+        "id": "0KtKac3tvjeGjg6FXcUy7X",
+        "uri": "spotify:track:0KtKac3tvjeGjg6FXcUy7X",
+        "title": "Time Bomb",
+        "artists": [
+          {
+            "id": "0q9lPhJHW5R9J7RXIJRbTk",
+            "name": "Iration"
+          }
+        ],
+        "album": {
+          "id": "2cj7tjVe3FsSfTZCKk1jNk",
+          "name": "Time Bomb",
+          "release_date": "2010-03-16"
+        },
+        "duration_ms": 190693,
+        "isrc": "USME30902987"
+      },
+      "score": 225
+    },
+    {
+      "query": {
+        "artist": "The Movement",
+        "title": "Sounds of Summer"
+      },
+      "bucket": "exact",
+      "chosen": {
+        "id": "0KDcidJicB6nLzBTIvGzZa",
+        "uri": "spotify:track:0KDcidJicB6nLzBTIvGzZa",
+        "title": "Sounds Of Summer",
+        "artists": [
+          {
+            "id": "1qwdTaVUdjYJLLoxtFmsqr",
+            "name": "The Movement"
+          },
+          {
+            "id": "6MxlVTY6PmY8Nyn16fvxtb",
+            "name": "Slightly Stoopid"
+          }
+        ],
+        "album": {
+          "id": "5tYZDsMZujFGrxrdVm3TAy",
+          "name": "No Worry",
+          "release_date": "2022-04-15"
+        },
+        "duration_ms": 221621,
+        "isrc": "USLZJ2192301"
+      },
+      "note": "same recording across releases (ISRC USLZJ2192301); chose earliest",
+      "score": 225
+    },
+    {
+      "query": {
+        "artist": "Gojira",
+        "title": "Flying Whales"
+      },
+      "bucket": "exact",
+      "chosen": {
+        "id": "5OjCsHeByDYEGxMrb1z8KQ",
+        "uri": "spotify:track:5OjCsHeByDYEGxMrb1z8KQ",
+        "title": "Flying Whales",
+        "artists": [
+          {
+            "id": "0GDGKpJFhVpcjIGF8N6Ewt",
+            "name": "Gojira"
+          }
+        ],
+        "album": {
+          "id": "0AvFF0HlQYvYKHaRURGZBs",
+          "name": "From Mars to Sirius",
+          "release_date": "2005-09-27"
+        },
+        "duration_ms": 464453,
+        "isrc": "FR6V80520037"
+      },
+      "score": 225
+    },
+    {
+      "query": {
+        "artist": "Gang Starr",
+        "title": "Mass Appeal"
+      },
+      "bucket": "ambiguous",
+      "options": [
+        {
+          "id": "1AirksOVdFaTXWOZ72f4cM",
+          "uri": "spotify:track:1AirksOVdFaTXWOZ72f4cM",
+          "title": "Mass Appeal",
+          "artists": [
+            {
+              "id": "5cMgGlA1xGyeAB2ctYlRdZ",
+              "name": "Gang Starr"
+            }
+          ],
+          "album": {
+            "id": "0SdJmKtDun7JRrKt3bFcfM",
+            "name": "Throwback Tunes: Hip Hop",
+            "release_date": "2017-09-01"
+          },
+          "duration_ms": 221304,
+          "isrc": "USCH39400036"
+        },
+        {
+          "id": "1dJNuQQ5Zp06oBlnwpiNzT",
+          "uri": "spotify:track:1dJNuQQ5Zp06oBlnwpiNzT",
+          "title": "Mass Appeal",
+          "artists": [
+            {
+              "id": "5cMgGlA1xGyeAB2ctYlRdZ",
+              "name": "Gang Starr"
+            }
+          ],
+          "album": {
+            "id": "0TMIeuykc2gfMc68YGppoh",
+            "name": "Full Clip: A Decade Of Gang Starr",
+            "release_date": "1999-07-13"
+          },
+          "duration_ms": 220800,
+          "isrc": "USCH39400036"
+        },
+        {
+          "id": "2Yrk8fTzaw7wPIYAj7wfNG",
+          "uri": "spotify:track:2Yrk8fTzaw7wPIYAj7wfNG",
+          "title": "Mass Appeal",
+          "artists": [
+            {
+              "id": "5cMgGlA1xGyeAB2ctYlRdZ",
+              "name": "Gang Starr"
+            }
+          ],
+          "album": {
+            "id": "66Qu8lW00JUHu9quMfIKKv",
+            "name": "L.A. Originals",
+            "release_date": "2020-12-04"
+          },
+          "duration_ms": 220906,
+          "isrc": "USCH39400036"
+        }
+      ],
+      "note": "multiple exact matches; caller picks",
+      "score": 225
+    }
+  ],
+  "not_found": null,
+  "ambiguous": [
+    {
+      "query": {
+        "artist": "Gang Starr",
+        "title": "Mass Appeal"
+      },
+      "bucket": "ambiguous",
+      "options": [
+        {
+          "id": "1AirksOVdFaTXWOZ72f4cM",
+          "uri": "spotify:track:1AirksOVdFaTXWOZ72f4cM",
+          "title": "Mass Appeal",
+          "artists": [
+            {
+              "id": "5cMgGlA1xGyeAB2ctYlRdZ",
+              "name": "Gang Starr"
+            }
+          ],
+          "album": {
+            "id": "0SdJmKtDun7JRrKt3bFcfM",
+            "name": "Throwback Tunes: Hip Hop",
+            "release_date": "2017-09-01"
+          },
+          "duration_ms": 221304,
+          "isrc": "USCH39400036"
+        },
+        {
+          "id": "1dJNuQQ5Zp06oBlnwpiNzT",
+          "uri": "spotify:track:1dJNuQQ5Zp06oBlnwpiNzT",
+          "title": "Mass Appeal",
+          "artists": [
+            {
+              "id": "5cMgGlA1xGyeAB2ctYlRdZ",
+              "name": "Gang Starr"
+            }
+          ],
+          "album": {
+            "id": "0TMIeuykc2gfMc68YGppoh",
+            "name": "Full Clip: A Decade Of Gang Starr",
+            "release_date": "1999-07-13"
+          },
+          "duration_ms": 220800,
+          "isrc": "USCH39400036"
+        },
+        {
+          "id": "2Yrk8fTzaw7wPIYAj7wfNG",
+          "uri": "spotify:track:2Yrk8fTzaw7wPIYAj7wfNG",
+          "title": "Mass Appeal",
+          "artists": [
+            {
+              "id": "5cMgGlA1xGyeAB2ctYlRdZ",
+              "name": "Gang Starr"
+            }
+          ],
+          "album": {
+            "id": "66Qu8lW00JUHu9quMfIKKv",
+            "name": "L.A. Originals",
+            "release_date": "2020-12-04"
+          },
+          "duration_ms": 220906,
+          "isrc": "USCH39400036"
+        }
+      ],
+      "note": "multiple exact matches; caller picks",
+      "score": 225
+    }
+  ],
+  "readback_uris": [
+    "spotify:track:7Clj1VaR0Vww6bUuM3nBk1",
+    "spotify:track:0KtKac3tvjeGjg6FXcUy7X",
+    "spotify:track:0KDcidJicB6nLzBTIvGzZa",
+    "spotify:track:5OjCsHeByDYEGxMrb1z8KQ"
+  ],
+  "readback_matches": true
+}

@@ -12,9 +12,12 @@ import (
 // SearchTracks searches with Spotify field filters, never free text. The
 // resolver builds queries like `track:"..." artist:"..."` so scoring runs
 // against tightly-scoped candidates.
+//
+// Feb 2026: dev-mode apps get a hard cap of limit=10 on /search (11+ returns
+// 400 Invalid limit; live-verified 2026-07-25), so the cap is enforced here.
 func (c *Client) SearchTracks(ctx context.Context, query string, limit int) ([]model.Track, error) {
-	if limit <= 0 || limit > 50 {
-		limit = 20
+	if limit <= 0 || limit > 10 {
+		limit = 10
 	}
 	q := url.Values{
 		"q":     {query},

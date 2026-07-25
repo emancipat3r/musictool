@@ -63,11 +63,7 @@ func (s *Service) BuildExact(ctx context.Context, opts BuildOptions) (*BuildResu
 		}
 	}
 
-	user, err := s.SP.CurrentUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-	pl, err := s.SP.CreatePlaylist(ctx, user.ID, opts.Name, opts.Description, opts.Public)
+	pl, err := s.SP.CreatePlaylist(ctx, opts.Name, opts.Description, opts.Public)
 	if err != nil {
 		return nil, err
 	}

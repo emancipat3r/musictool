@@ -79,15 +79,15 @@ func (r *Resolver) Resolve(ctx context.Context, q model.TrackQuery) (Resolution,
 		}
 	}
 
-	// Field-filtered search, never free text.
+	// Field-filtered search, never free text. 10 is the dev-mode search cap.
 	query := fieldQuery(q.Artist, q.Title, q.Album)
-	cands, err := r.search.SearchTracks(ctx, query, 20)
+	cands, err := r.search.SearchTracks(ctx, query, 10)
 	if err != nil {
 		return Resolution{}, err
 	}
 	// Retry once without album if the album filter over-constrained.
 	if len(cands) == 0 && q.Album != "" {
-		cands, err = r.search.SearchTracks(ctx, fieldQuery(q.Artist, q.Title, ""), 20)
+		cands, err = r.search.SearchTracks(ctx, fieldQuery(q.Artist, q.Title, ""), 10)
 		if err != nil {
 			return Resolution{}, err
 		}
@@ -119,6 +119,7 @@ func Score(q model.TrackQuery, cands []model.Track) Resolution {
 	nqTitle := NormalizeTitle(q.Title)
 	nqArtist := NormalizeArtist(q.Artist)
 	nqAlbum := NormalizeTitle(q.Album)
+	nqVerbatim := NormalizeVerbatim(q.Title)
 
 	scoredCands := make([]scored, 0, len(cands))
 	for _, c := range cands {
@@ -134,6 +135,17 @@ func Score(q model.TrackQuery, cands []model.Track) Resolution {
 			s += 100
 		case titlePart:
 			s += 45
+		}
+		// Verbatim bonus: the candidate's raw title matches the query with no
+		// tag-stripping needed ("Time Bomb" beats "Time Bomb - Live", which
+		// only matches after normalization).
+		if titleExact && NormalizeVerbatim(c.Title) == nqVerbatim {
+			s += 25
+		}
+		// Variant penalty: candidate carries a performance-variant marker
+		// (live/acoustic/instrumental/…) the query did not ask for.
+		if HasUnwantedVariant(q.Title, c.Title) {
+			s -= 15
 		}
 		switch {
 		case artistExact:
@@ -156,7 +168,10 @@ func Score(q model.TrackQuery, cands []model.Track) Resolution {
 				s += 6
 			}
 		}
-		// Popularity as a small, stable tiebreak (0-100 -> 0-10).
+		// Popularity as a small, stable tiebreak (0-100 -> 0-10). NOTE: as of
+		// the Feb 2026 dev-mode changes, /search results omit popularity, so
+		// this is usually 0; it still helps when candidates come from library
+		// data.
 		s += c.Popularity / 10
 
 		scoredCands = append(scoredCands, scored{track: c, score: s, title: titleExact, artist: artistExact})
@@ -195,9 +210,20 @@ func classify(q model.TrackQuery, ranked []scored) Resolution {
 	t := best.track
 	switch {
 	case best.title && best.artist:
-		// Check the runner-up isn't an equally exact, distinct recording.
-		if len(ranked) > 1 && ranked[1].title && ranked[1].artist &&
-			ranked[1].score == best.score && ranked[1].track.URI != t.URI {
+		// Gather every equally-scored exact match and decide whether the tie
+		// is real ambiguity or the same recording republished across releases.
+		tied := tiedExact(ranked)
+		if len(tied) > 1 {
+			if group, isrc := dominantISRCGroup(tied); group != nil {
+				// One recording, many releases (singles, compilations,
+				// deluxe editions; stray clean edits carry their own ISRC and
+				// are outvoted). Prefer the earliest release, then URI.
+				chosen := earliestRelease(group)
+				res.Bucket = Exact
+				res.Chosen = &chosen
+				res.Note = "same recording across releases (ISRC " + isrc + "); chose earliest"
+				return res
+			}
 			res.Bucket = Ambiguous
 			res.Options = topTracks(ranked, 3)
 			res.Note = "multiple exact matches; caller picks"
@@ -257,6 +283,62 @@ func titleOverlaps(a, b string) bool {
 // popular was chosen and should be flagged).
 func popularTie(ranked []scored) bool {
 	return len(ranked) > 1 && ranked[1].score == ranked[0].score
+}
+
+// tiedExact returns every candidate that ties the top score with exact
+// title+artist matches.
+func tiedExact(ranked []scored) []model.Track {
+	if len(ranked) == 0 || !ranked[0].title || !ranked[0].artist {
+		return nil
+	}
+	best := ranked[0].score
+	var out []model.Track
+	for _, r := range ranked {
+		if r.score == best && r.title && r.artist {
+			out = append(out, r.track)
+		}
+	}
+	return out
+}
+
+// dominantISRCGroup groups tied candidates by ISRC and returns the dominant
+// group when one clearly represents "the recording": at least 3 members and at
+// least 75% of the tie. Live regression: "Mass Appeal" returns 9 tied
+// candidates, 8 sharing one ISRC (compilations of the same recording) plus a
+// lone clean edit with its own — that is one recording, not ambiguity. A
+// genuine 2-recording split (no dominant group) still returns nil so the
+// caller is asked to pick.
+func dominantISRCGroup(tracks []model.Track) ([]model.Track, string) {
+	groups := map[string][]model.Track{}
+	for _, t := range tracks {
+		key := t.ISRC
+		if key == "" {
+			key = "\x00" + t.URI // no ISRC: a singleton group of its own
+		}
+		groups[key] = append(groups[key], t)
+	}
+	for isrc, g := range groups {
+		if isrc[0] != '\x00' && len(g) >= 3 && len(g)*4 >= len(tracks)*3 {
+			return g, isrc
+		}
+	}
+	return nil, ""
+}
+
+// earliestRelease picks the track with the earliest album release date
+// (lexicographic on ISO dates), breaking ties by URI for determinism.
+func earliestRelease(tracks []model.Track) model.Track {
+	best := tracks[0]
+	for _, t := range tracks[1:] {
+		bd, td := best.Album.ReleaseDate, t.Album.ReleaseDate
+		switch {
+		case td != "" && (bd == "" || td < bd):
+			best = t
+		case td == bd && t.URI < best.URI:
+			best = t
+		}
+	}
+	return best
 }
 
 func topTracks(ranked []scored, n int) []model.Track {

@@ -72,9 +72,11 @@ type apiPlaylist struct {
 	Owner       struct {
 		ID string `json:"id"`
 	} `json:"owner"`
-	Tracks struct {
+	// Feb 2026: the playlist object's track summary moved from "tracks" to
+	// "items". Live-verified 2026-07-25.
+	Items struct {
 		Total int `json:"total"`
-	} `json:"tracks"`
+	} `json:"items"`
 }
 
 func (p apiPlaylist) toModel() model.Playlist {
@@ -84,15 +86,17 @@ func (p apiPlaylist) toModel() model.Playlist {
 		Description: p.Description,
 		Public:      p.Public,
 		OwnerID:     p.Owner.ID,
-		TrackCount:  p.Tracks.Total,
+		TrackCount:  p.Items.Total,
 		SnapshotID:  p.SnapshotID,
 	}
 }
 
+// apiPlaylistTrackItem is one entry of GET /playlists/{id}/items. Feb 2026:
+// the nested track moved from the "track" key to "item".
 type apiPlaylistTrackItem struct {
 	AddedAt string   `json:"added_at"`
 	IsLocal bool     `json:"is_local"`
-	Track   apiTrack `json:"track"`
+	Item    apiTrack `json:"item"`
 }
 
 type apiRecentItem struct {
