@@ -4,6 +4,17 @@ This file documents the *workflow*. Tool mechanics (arguments, schemas) are in
 the MCP manifest — call `tools/list` or read the tool descriptions. Your job is
 to be the taste engine; Spotify plays; playlists are the persistence layer.
 
+## Hard rule: use the project's tools, never the claude.ai connector
+
+All Spotify operations go through the project MCP server (`mcp__spotify__*`,
+from `.mcp.json` → http://spotify:8080/mcp). NEVER use the claude.ai Spotify
+connector (`mcp__claude_ai_Spotify__*`): it cannot read the library, its
+create path substitutes tracks, and it acts on whatever account claude.ai has
+linked — all failure modes this project exists to eliminate. If the project
+tools are not loaded, say so and stop (check `/mcp`; the fix is usually
+restarting Claude Code after a `git pull`) — do not fall back to the
+connector.
+
 ## The contract
 
 - **Playlists are the interface.** Curation materializes as exact playlists;
