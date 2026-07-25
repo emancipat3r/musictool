@@ -6,6 +6,17 @@ set -eu
 
 : "${SPOTIFY_CLIENT_ID:?SPOTIFY_CLIENT_ID must be set}"
 
+# Shared self-signed TLS pair on the state volume (also used by zellij web in
+# the sandbox). HTTPS is required for browser clipboard access in the terminal.
+CERT_DIR=/data/zellij-certs
+if [ ! -f "${CERT_DIR}/cert.pem" ] || [ ! -f "${CERT_DIR}/key.pem" ]; then
+  echo "generating self-signed TLS pair at ${CERT_DIR}" >&2
+  mkdir -p "${CERT_DIR}"
+  openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+    -keyout "${CERT_DIR}/key.pem" -out "${CERT_DIR}/cert.pem" \
+    -days 3650 -nodes -subj "/CN=spotifytool" >/dev/null 2>&1
+fi
+
 # One initial sync on boot if a refresh token is present, so the dashboard has
 # data immediately. Non-fatal if it fails (e.g. token not yet minted).
 if [ -n "${SPOTIFY_REFRESH_TOKEN:-}" ]; then

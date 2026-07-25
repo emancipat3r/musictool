@@ -18,7 +18,7 @@ RUN go build -ldflags "-s -w -X main.version=${VERSION}" -o /out/spotifytool ./c
 # happens in the sandbox container's interactive session (Max subscription);
 # the discovery batch is the /discovery-batch command run there.
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata busybox-suid
+RUN apk add --no-cache ca-certificates tzdata busybox-suid openssl
 WORKDIR /app
 COPY --from=build /out/spotifytool /usr/local/bin/spotifytool
 COPY deploy/crontab /etc/crontabs/root

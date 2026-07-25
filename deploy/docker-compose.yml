@@ -21,9 +21,14 @@ services:
       SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:?set in .env}
       SPOTIFY_REFRESH_TOKEN: ${SPOTIFY_REFRESH_TOKEN:?run `spotifytool auth --print-refresh-token` once}
       LASTFM_API_KEY: ${LASTFM_API_KEY:-}
-      # Terminal pane target: the auth-injecting proxy (plain HTTP, no login,
-      # no cert warning). Override TERMINAL_URL to point elsewhere.
-      SPOTIFYTOOL_TERMINAL_URL: ${TERMINAL_URL:-http://${LAN_IP:-127.0.0.1}:8083}
+      # Terminal pane target: the auth-injecting proxy (HTTPS: browsers only
+      # allow clipboard access in secure contexts, so plain HTTP would break
+      # copy in the terminal). Override TERMINAL_URL to point elsewhere.
+      SPOTIFYTOOL_TERMINAL_URL: ${TERMINAL_URL:-https://${LAN_IP:-127.0.0.1}:8083}
+      # Dashboard + terminal proxy serve TLS with the shared self-signed pair
+      # (generated on the state volume at boot; one warning-accept per device).
+      SPOTIFYTOOL_TLS_CERT: /data/zellij-certs/cert.pem
+      SPOTIFYTOOL_TLS_KEY: /data/zellij-certs/key.pem
       # The proxy logs into zellij web over the compose network using the
       # token captured on the shared volume, then forwards everything
       # (WebSockets included) with the session cookie attached.

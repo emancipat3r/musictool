@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -30,6 +32,8 @@ func cmdServe(ctx context.Context, args []string) error {
 	termAddr := fs.String("term-addr", envOr("SPOTIFYTOOL_TERMPROXY_ADDR", ":8083"), "terminal proxy listen address")
 	zellijUpstream := fs.String("zellij-upstream", envOr("SPOTIFYTOOL_ZELLIJ_UPSTREAM", ""),
 		"zellij web URL to auth-proxy (e.g. https://sandbox:8082); empty disables the terminal proxy")
+	tlsCert := fs.String("tls-cert", envOr("SPOTIFYTOOL_TLS_CERT", ""), "TLS cert for dashboard + terminal proxy (empty = plain HTTP)")
+	tlsKey := fs.String("tls-key", envOr("SPOTIFYTOOL_TLS_KEY", ""), "TLS key for dashboard + terminal proxy")
 	noDash := fs.Bool("no-dashboard", false, "do not serve the dashboard")
 	noMCP := fs.Bool("no-mcp", false, "do not serve MCP")
 	verbose := fs.Bool("v", false, "verbose")
@@ -37,6 +41,18 @@ func cmdServe(ctx context.Context, args []string) error {
 		return err
 	}
 	logx.Verbose = *verbose
+
+	// TLS matters beyond hygiene: browsers only expose the clipboard API in
+	// secure contexts, so the zellij web client's copy (Ctrl+Shift+C, OSC52)
+	// silently breaks over plain HTTP on a LAN address.
+	if *tlsCert != "" {
+		if _, err := os.Stat(*tlsCert); err != nil {
+			return fmt.Errorf("TLS cert configured but unreadable: %w", err)
+		}
+		if _, err := os.Stat(*tlsKey); err != nil {
+			return fmt.Errorf("TLS key configured but unreadable: %w", err)
+		}
+	}
 
 	cfg := config.Load()
 	svc, err := service.New(cfg)
@@ -53,16 +69,18 @@ func cmdServe(ctx context.Context, args []string) error {
 	var servers []*http.Server
 
 	if !*noMCP {
+		// MCP stays plain HTTP: it lives on the compose network only and the
+		// Claude Code client is configured for http://spotify:8080/mcp.
 		m := mcp.NewServer("spotifytool", version, mcp.Tools(svc))
 		srv := &http.Server{Addr: *mcpAddr, Handler: m.Handler(), ReadHeaderTimeout: 10 * time.Second}
 		servers = append(servers, srv)
-		go serveHTTP(srv, "mcp", *mcpAddr+"/mcp")
+		go serveHTTP(srv, "mcp", *mcpAddr+"/mcp", "", "")
 	}
 	if !*noDash {
 		d := dashboard.New(svc.DB, cfg)
 		srv := &http.Server{Addr: *dashAddr, Handler: d.Handler(), ReadHeaderTimeout: 10 * time.Second}
 		servers = append(servers, srv)
-		go serveHTTP(srv, "dashboard", *dashAddr)
+		go serveHTTP(srv, "dashboard", *dashAddr, *tlsCert, *tlsKey)
 	}
 	if *zellijUpstream != "" {
 		tokenPath := filepath.Join(cfg.DataDir, "zellij-web-token.txt")
@@ -73,7 +91,7 @@ func cmdServe(ctx context.Context, args []string) error {
 		// No ReadHeaderTimeout here: long-lived terminal WebSockets.
 		srv := &http.Server{Addr: *termAddr, Handler: tp}
 		servers = append(servers, srv)
-		go serveHTTP(srv, "terminal proxy", *termAddr)
+		go serveHTTP(srv, "terminal proxy", *termAddr, *tlsCert, *tlsKey)
 	}
 	if len(servers) == 0 {
 		return errors.New("nothing to serve: both --no-mcp and --no-dashboard set")
@@ -89,14 +107,23 @@ func cmdServe(ctx context.Context, args []string) error {
 	return nil
 }
 
-func serveHTTP(srv *http.Server, label, shown string) {
+func serveHTTP(srv *http.Server, label, shown, tlsCert, tlsKey string) {
 	ln, err := net.Listen("tcp", srv.Addr)
 	if err != nil {
 		logx.Errorf("%s listen %s: %v", label, srv.Addr, err)
 		return
 	}
-	logx.Infof("%s listening on http://%s", label, shown)
-	if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+	scheme := "http"
+	if tlsCert != "" && tlsKey != "" {
+		scheme = "https"
+	}
+	logx.Infof("%s listening on %s://%s", label, scheme, shown)
+	if scheme == "https" {
+		err = srv.ServeTLS(ln, tlsCert, tlsKey)
+	} else {
+		err = srv.Serve(ln)
+	}
+	if err != nil && err != http.ErrServerClosed {
 		logx.Errorf("%s server: %v", label, err)
 	}
 }
