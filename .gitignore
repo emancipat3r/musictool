@@ -21,3 +21,7 @@ token.json
 /github
 id_ed25519*
 *.pem
+
+# session/debug droppings
+*.err
+build*.json
