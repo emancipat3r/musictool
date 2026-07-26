@@ -52,7 +52,7 @@ import javax.net.ssl.X509TrustManager;
  */
 public class MainActivity extends Activity {
 
-    private static final String DEFAULT_URL = "https://192.168.12.56:8081";
+    private static final String DEFAULT_URL = "http://192.168.12.56:8085";
     private static final String TAILSCALE_PKG = "com.tailscale.ipn";
 
     private final ExecutorService exec = Executors.newSingleThreadExecutor();

@@ -131,7 +131,7 @@ func (d *Dashboard) handleIndex(w http.ResponseWriter, r *http.Request) {
 		SigNeg:      sigNeg,
 		SigPosPct:   posPct,
 		SigNegPct:   negPct,
-		TerminalURL: d.cfg.TerminalURL,
+		TerminalURL: d.terminalURLFor(r),
 	}
 	d.render(w, data)
 }
@@ -203,14 +203,24 @@ func (d *Dashboard) handleBatch(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, res.Body)
 }
 
-// handleTerminal renders the service-hatch pane: the terminal at
-// SPOTIFYTOOL_TERMINAL_URL (normally the auth-injecting proxy, so no login is
-// ever shown), embedded with an open-in-tab link.
+// terminalURLFor picks the terminal proxy address matching how the client
+// reached us: TLS clients (browsers) get the TLS proxy; plain-HTTP clients
+// (the companion app) get the plain proxy, keeping ws:// end to end so
+// WebView TLS quirks never touch the terminal.
+func (d *Dashboard) terminalURLFor(r *http.Request) string {
+	if r.TLS == nil && d.cfg.TerminalURLHTTP != "" {
+		return d.cfg.TerminalURLHTTP
+	}
+	return d.cfg.TerminalURL
+}
+
+// handleTerminal renders the service-hatch pane: the terminal proxy embedded,
+// with an open-in-tab link.
 func (d *Dashboard) handleTerminal(w http.ResponseWriter, r *http.Request) {
 	d.render(w, pageData{
 		Title:       "terminal",
 		Page:        pageTerminal,
-		TerminalURL: d.cfg.TerminalURL,
+		TerminalURL: d.terminalURLFor(r),
 	})
 }
 
@@ -234,7 +244,7 @@ func (d *Dashboard) handleProfile(w http.ResponseWriter, r *http.Request) {
 		Page:        pageProfile,
 		Profile:     content,
 		Saved:       r.URL.Query().Get("saved") == "1",
-		TerminalURL: d.cfg.TerminalURL,
+		TerminalURL: d.terminalURLFor(r),
 	})
 }
 

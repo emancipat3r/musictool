@@ -57,6 +57,11 @@ type Config struct {
 	// control-room layout. Empty hides the pane.
 	TerminalURL string
 
+	// TerminalURLHTTP is the plain-HTTP terminal proxy address served to
+	// clients that arrive over HTTP (the companion app), where WebView TLS
+	// quirks make wss unreliable (SPOTIFYTOOL_TERMINAL_URL_HTTP).
+	TerminalURLHTTP string
+
 	// TriggerURL is the sandbox's command-injection endpoint
 	// (SPOTIFYTOOL_TRIGGER_URL, e.g. http://sandbox:8090) used by the
 	// dashboard's "Run discovery batch" button. Empty disables the button's
@@ -95,13 +100,14 @@ func (c Config) DigestDir() string {
 // usable token, auth requires only the client id).
 func Load() Config {
 	c := Config{
-		ClientID:     strings.TrimSpace(os.Getenv("SPOTIFY_CLIENT_ID")),
-		RefreshToken: strings.TrimSpace(os.Getenv("SPOTIFY_REFRESH_TOKEN")),
-		LastFMKey:    strings.TrimSpace(os.Getenv("LASTFM_API_KEY")),
-		TerminalURL:  strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TERMINAL_URL")),
-		TriggerURL:   strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TRIGGER_URL")),
-		ConfigDir:    configDir(),
-		DataDir:      dataDir(),
+		ClientID:        strings.TrimSpace(os.Getenv("SPOTIFY_CLIENT_ID")),
+		RefreshToken:    strings.TrimSpace(os.Getenv("SPOTIFY_REFRESH_TOKEN")),
+		LastFMKey:       strings.TrimSpace(os.Getenv("LASTFM_API_KEY")),
+		TerminalURL:     strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TERMINAL_URL")),
+		TerminalURLHTTP: strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TERMINAL_URL_HTTP")),
+		TriggerURL:      strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TRIGGER_URL")),
+		ConfigDir:       configDir(),
+		DataDir:         dataDir(),
 	}
 	return c
 }

@@ -85,6 +85,19 @@ func cmdServe(ctx context.Context, args []string) error {
 		srv := &http.Server{Addr: *dashAddr, Handler: d.Handler(), ReadHeaderTimeout: 10 * time.Second}
 		servers = append(servers, srv)
 		go serveHTTP(srv, "dashboard", *dashAddr, *tlsCert, *tlsKey)
+		// Companion-app lane: plain HTTP twin of the dashboard. Android
+		// WebView JS WebSockets do not consult the app's SSL error handler,
+		// so self-signed TLS breaks the terminal inside the app; the app uses
+		// this listener instead (no TLS anywhere in its path). Browsers keep
+		// the TLS listener for clipboard (secure-context) support.
+		if *tlsCert != "" {
+			httpAddr := envOr("SPOTIFYTOOL_DASH_HTTP_ADDR", ":8085")
+			if httpAddr != "off" {
+				srv2 := &http.Server{Addr: httpAddr, Handler: d.Handler(), ReadHeaderTimeout: 10 * time.Second}
+				servers = append(servers, srv2)
+				go serveHTTP(srv2, "dashboard (app/http)", httpAddr, "", "")
+			}
+		}
 	}
 	if *zellijUpstream != "" {
 		tokenPath := filepath.Join(cfg.DataDir, "zellij-web-token.txt")
@@ -98,6 +111,14 @@ func cmdServe(ctx context.Context, args []string) error {
 		srv := &http.Server{Addr: *termAddr, Handler: tp}
 		servers = append(servers, srv)
 		go serveHTTP(srv, "terminal proxy", *termAddr, *tlsCert, *tlsKey)
+		if *tlsCert != "" {
+			httpAddr := envOr("SPOTIFYTOOL_TERM_HTTP_ADDR", ":8084")
+			if httpAddr != "off" {
+				srv2 := &http.Server{Addr: httpAddr, Handler: tp}
+				servers = append(servers, srv2)
+				go serveHTTP(srv2, "terminal proxy (app/http)", httpAddr, "", "")
+			}
+		}
 	}
 	if len(servers) == 0 {
 		return errors.New("nothing to serve: both --no-mcp and --no-dashboard set")

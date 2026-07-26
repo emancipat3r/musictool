@@ -13,7 +13,7 @@
         android:label="spotifytool"
         android:icon="@mipmap/ic_launcher"
         android:theme="@style/Theme.Spotifytool"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"

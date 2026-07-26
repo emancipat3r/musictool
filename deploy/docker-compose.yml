@@ -25,6 +25,10 @@ services:
       # allow clipboard access in secure contexts, so plain HTTP would break
       # copy in the terminal). Override TERMINAL_URL to point elsewhere.
       SPOTIFYTOOL_TERMINAL_URL: ${TERMINAL_URL:-https://${LAN_IP:-127.0.0.1}:8083}
+      # Plain-HTTP twin lane for the companion app (Android WebView JS
+      # WebSockets ignore the app's SSL handler, so self-signed wss breaks
+      # the terminal in-app; the app uses these instead).
+      SPOTIFYTOOL_TERMINAL_URL_HTTP: ${TERMINAL_URL_HTTP:-http://${LAN_IP:-127.0.0.1}:8084}
       # Dashboard + terminal proxy serve TLS with the shared self-signed pair
       # (generated on the state volume at boot; one warning-accept per device).
       SPOTIFYTOOL_TLS_CERT: /data/zellij-certs/cert.pem
@@ -42,8 +46,10 @@ services:
     # Dashboard + terminal proxy on the LAN interface only (MCP stays on the
     # compose network).
     ports:
-      - "${LAN_IP:?set LAN_IP in .env}:8081:8081"   # dashboard (read-only UI)
-      - "${LAN_IP:?set LAN_IP in .env}:8083:8083"   # terminal (auth-injected zellij)
+      - "${LAN_IP:?set LAN_IP in .env}:8081:8081"   # dashboard https (browsers)
+      - "${LAN_IP:?set LAN_IP in .env}:8083:8083"   # terminal https (browsers)
+      - "${LAN_IP:?set LAN_IP in .env}:8085:8085"   # dashboard http (companion app)
+      - "${LAN_IP:?set LAN_IP in .env}:8084:8084"   # terminal http (companion app)
     # MCP (8080) is intentionally NOT published — container 1 reaches it over
     # the compose network at http://spotify:8080/mcp.
     expose:
