@@ -73,7 +73,16 @@ web_server_cert "${CERT}"
 web_server_key "${KEY}"
 EOF
 
+# A session can exist as a DEAD ghost: session serialization lives in
+# ~/.local/share/zellij, which is volume-mounted for token persistence, so
+# exited sessions survive container rebuilds and list-sessions --short shows
+# them indistinguishably from live ones. Attaching to a ghost lands on the
+# resurrection screen instead of Claude. Detect EXITED and recreate fresh.
 ensure_session() {
+  if zellij list-sessions --no-formatting 2>/dev/null | grep -E "^${SESSION} " | grep -q "EXITED"; then
+    echo "session '${SESSION}' is dead; deleting and recreating" >&2
+    zellij delete-session "${SESSION}" --force >/dev/null 2>&1 || true
+  fi
   if ! zellij list-sessions --short 2>/dev/null | grep -qx "${SESSION}"; then
     echo "creating detached zellij session '${SESSION}'" >&2
     zellij attach "${SESSION}" --create-background >/dev/null 2>&1 || true
