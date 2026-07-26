@@ -301,12 +301,18 @@ func tiedExact(ranked []scored) []model.Track {
 	return out
 }
 
-// dominantISRCGroup groups tied candidates by ISRC and returns the dominant
-// group when one clearly represents "the recording": at least 3 members and at
-// least 75% of the tie. Live regression: "Mass Appeal" returns 9 tied
-// candidates, 8 sharing one ISRC (compilations of the same recording) plus a
-// lone clean edit with its own — that is one recording, not ambiguity. A
-// genuine 2-recording split (no dominant group) still returns nil so the
+// dominantISRCGroup groups tied candidates by ISRC and returns the group that
+// represents "the recording", if any:
+//
+//   - All tied candidates share one ISRC → same recording, any group size.
+//     (Live regression: Iration "Automatic" appears on two releases with the
+//     same ISRC and only release dates differing — that is one recording,
+//     not ambiguity.)
+//   - Otherwise a dominant group of at least 3 members holding at least 75%
+//     of the tie wins. (Live regression: "Mass Appeal", 8 compilations of one
+//     recording plus a lone clean edit with its own ISRC.)
+//
+// A genuine multi-recording split with no dominant group returns nil so the
 // caller is asked to pick.
 func dominantISRCGroup(tracks []model.Track) ([]model.Track, string) {
 	groups := map[string][]model.Track{}
@@ -318,7 +324,10 @@ func dominantISRCGroup(tracks []model.Track) ([]model.Track, string) {
 		groups[key] = append(groups[key], t)
 	}
 	for isrc, g := range groups {
-		if isrc[0] != '\x00' && len(g) >= 3 && len(g)*4 >= len(tracks)*3 {
+		if isrc[0] == '\x00' {
+			continue
+		}
+		if len(g) == len(tracks) || (len(g) >= 3 && len(g)*4 >= len(tracks)*3) {
 			return g, isrc
 		}
 	}

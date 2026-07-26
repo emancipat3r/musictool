@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/emancipat3r/spotifytool/internal/model"
 	"github.com/emancipat3r/spotifytool/internal/resolve"
@@ -107,4 +108,83 @@ func equalURIs(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// AppendExact resolves picks and appends them to an EXISTING playlist
+// (referenced by id or exact name, matched against the live playlist list),
+// then read-back-verifies that the appended tail matches the resolved URIs.
+// Duplicates already in the playlist are skipped, reported via Note. This is
+// the fix-up path for ambiguous picks settled after a build.
+func (s *Service) AppendExact(ctx context.Context, playlistRef string, queries []model.TrackQuery) (*BuildResult, error) {
+	pl, err := s.findPlaylist(ctx, playlistRef)
+	if err != nil {
+		return nil, err
+	}
+	res := &BuildResult{Name: pl.Name, PlaylistID: pl.ID, PlaylistURI: "spotify:playlist:" + pl.ID, Requested: len(queries)}
+
+	resolutions, err := s.Res.ResolveList(ctx, queries)
+	if err != nil {
+		return nil, err
+	}
+	res.Resolutions = resolutions
+
+	existing, err := s.SP.ReadbackURIs(ctx, pl.ID)
+	if err != nil {
+		return nil, err
+	}
+	present := map[string]bool{}
+	for _, u := range existing {
+		present[u] = true
+	}
+
+	var accepted []string
+	for _, r := range resolutions {
+		switch r.Bucket {
+		case resolve.Exact, resolve.Probable:
+			if r.Chosen != nil && r.Chosen.URI != "" && !present[r.Chosen.URI] {
+				accepted = append(accepted, r.Chosen.URI)
+				present[r.Chosen.URI] = true
+			}
+		case resolve.Ambiguous:
+			res.Ambiguous = append(res.Ambiguous, r)
+		case resolve.NotFound:
+			res.NotFound = append(res.NotFound, r.Query)
+		}
+	}
+
+	if len(accepted) > 0 {
+		if err := s.SP.AddTracks(ctx, pl.ID, accepted); err != nil {
+			return res, err
+		}
+	}
+	readback, err := s.SP.ReadbackURIs(ctx, pl.ID)
+	if err != nil {
+		return res, err
+	}
+	res.ReadbackURIs = readback
+	res.Added = len(accepted)
+	// Verify: previous contents plus the accepted tail, in order.
+	res.ReadbackMatches = equalURIs(append(append([]string{}, existing...), accepted...), readback)
+	return res, nil
+}
+
+// findPlaylist resolves an id or exact (case-insensitive) name against the
+// live playlist list, so just-created playlists work without waiting for a
+// sync.
+func (s *Service) findPlaylist(ctx context.Context, ref string) (model.Playlist, error) {
+	pls, err := s.SP.Playlists(ctx)
+	if err != nil {
+		return model.Playlist{}, err
+	}
+	for _, p := range pls {
+		if p.ID == ref {
+			return p, nil
+		}
+	}
+	for _, p := range pls {
+		if strings.EqualFold(p.Name, ref) {
+			return p, nil
+		}
+	}
+	return model.Playlist{}, fmt.Errorf("no playlist matches %q (by id or exact name)", ref)
 }

@@ -51,6 +51,8 @@ connector.
 3. `create_playlist_exact` creates the playlist, adds exactly the resolved URIs,
    and returns the read-back. Check `readback_matches`; surface `not_found` and
    `ambiguous` to the user. For ambiguous picks, choose from the returned top-3.
+4. To settle an ambiguous pick (or add late picks) use `add_to_playlist_exact`
+   on the existing playlist — never rebuild from scratch for a fix-up.
 
 ## Discovery batches (convention)
 

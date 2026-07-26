@@ -208,6 +208,26 @@ func TestScoreDominantISRCOutvotesCleanEdit(t *testing.T) {
 	}
 }
 
+// Live regression: Iration "Automatic" hits exactly two releases with the
+// same ISRC, same duration, both albums named "Automatic" — one recording.
+// A same-ISRC tie of any size must dedupe, not go ambiguous.
+func TestScoreTwoCandidatesSameISRC(t *testing.T) {
+	q := model.TrackQuery{Artist: "Iration", Title: "Automatic"}
+	mk := func(uri, date string) model.Track {
+		tr := trk(uri, "Automatic", "Iration", 0)
+		tr.ISRC = "USQY51285928"
+		tr.Album = model.Album{Name: "Automatic", ReleaseDate: date}
+		return tr
+	}
+	res := Score(q, []model.Track{mk("spotify:track:b", "2013-07-02"), mk("spotify:track:a", "2013-06-04")})
+	if res.Bucket != Exact {
+		t.Fatalf("bucket = %s (%s), want exact via same-ISRC dedupe", res.Bucket, res.Note)
+	}
+	if res.Chosen.URI != "spotify:track:a" {
+		t.Fatalf("chose %s, want the earlier release", res.Chosen.URI)
+	}
+}
+
 // stubSearcher lets us exercise Resolve end-to-end without network.
 type stubSearcher struct{ tracks []model.Track }
 

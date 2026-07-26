@@ -181,6 +181,27 @@ func Tools(svc *service.Service) []Tool {
 			},
 		},
 		{
+			Name:        "add_to_playlist_exact",
+			Description: "Resolve picks and append them to an EXISTING playlist (by id or exact name), with read-back verification of the appended tail. Duplicates already present are skipped. Use this to settle ambiguous picks after a build instead of rebuilding.",
+			InputSchema: obj(map[string]any{
+				"playlist": strProp("playlist id or exact name"),
+				"tracks":   map[string]any{"type": "array", "items": trackQuerySchema},
+			}, "playlist", "tracks"),
+			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
+				var a struct {
+					Playlist string             `json:"playlist"`
+					Tracks   []model.TrackQuery `json:"tracks"`
+				}
+				if err := json.Unmarshal(args, &a); err != nil {
+					return nil, err
+				}
+				if a.Playlist == "" || len(a.Tracks) == 0 {
+					return nil, errors.New("playlist and tracks are required")
+				}
+				return svc.AppendExact(ctx, a.Playlist, a.Tracks)
+			},
+		},
+		{
 			Name:        "get_artist_tags",
 			Description: "Last.fm tags + similar artists for an artist (discovery seed), served from local cache when available. Subjective qualities are tags, not audio-feature math.",
 			InputSchema: obj(map[string]any{"artist": strProp("artist name")}, "artist"),
