@@ -163,6 +163,16 @@ func (tp *TermProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/"+tp.session, http.StatusFound)
 		return
 	}
+	// Neutralize xterm's WebGL renderer: zellij's terminal.js loads it
+	// unconditionally and its context-loss handler just disposes (an upstream
+	// TODO), which leaves a black canvas on Android WebView and other
+	// environments with flaky WebGL. Serving a no-op stub makes xterm fall
+	// back to its DOM renderer, which paints everywhere.
+	if r.URL.Path == "/assets/addon-webgl.js" {
+		w.Header().Set("Content-Type", "text/javascript")
+		_, _ = w.Write([]byte(webglStub))
+		return
+	}
 	if err := tp.ensureLogin(); err != nil {
 		logx.Errorf("terminal proxy: %v", err)
 		http.Error(w, "terminal auth bootstrap failed: "+err.Error(), http.StatusServiceUnavailable)
@@ -170,3 +180,16 @@ func (tp *TermProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	tp.proxy.ServeHTTP(w, r)
 }
+
+// webglStub satisfies zellij web's `new WebglAddon.WebglAddon()` +
+// loadAddon lifecycle without ever creating a WebGL context.
+const webglStub = `// spotifytool stub: WebGL renderer disabled (breaks on Android WebView);
+// xterm.js falls back to its DOM renderer.
+(function () {
+  function WebglAddon() {}
+  WebglAddon.prototype.activate = function () {};
+  WebglAddon.prototype.dispose = function () {};
+  WebglAddon.prototype.onContextLoss = function () { return { dispose: function () {} }; };
+  window.WebglAddon = { WebglAddon: WebglAddon };
+})();
+`
