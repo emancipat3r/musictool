@@ -172,6 +172,33 @@ const pageTemplate = `<!doctype html>
                  border-radius: 12px; background: #14151a; }
   code { background: var(--bg1); border: 1px solid var(--bg2); border-radius: 6px;
          padding: .08rem .38rem; font-size: .85em; color: var(--accent); }
+
+  /* Mobile: two-row header (brand+theme, then a swipeable nav rail), tighter
+     grids, narrower labels. */
+  @media (max-width: 700px) {
+    header { flex-wrap: wrap; gap: .5rem .6rem; padding: .55rem .8rem; }
+    .brand { order: 1; margin-right: 0; }
+    .theme-pick { order: 2; margin-left: auto; }
+    .theme-pick select { max-width: 9.5rem; }
+    .spacer { display: none; }
+    nav { order: 3; width: 100%; flex-wrap: nowrap; overflow-x: auto;
+          scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    nav::-webkit-scrollbar { display: none; }
+    .nav-btn { white-space: nowrap; flex: none; }
+    main { padding: 1rem .8rem 2.5rem; }
+    .cards { grid-template-columns: repeat(3, 1fr); gap: .55rem; }
+    .card { padding: .65rem .7rem; border-radius: 12px; }
+    .card .n { font-size: 1.2rem; }
+    .card .l { font-size: .58rem; letter-spacing: .05em; }
+    .covers { grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: .6rem; }
+    .artist-row .name { flex: 0 0 108px; font-size: .8rem; }
+    .artist-row img, .artist-row .ph { width: 36px; height: 36px; }
+    section h2 { flex-wrap: wrap; row-gap: .4rem; }
+    section h2 .spacer { display: block; }
+    .sig-chips { grid-template-columns: repeat(2, 1fr); gap: .55rem; }
+    .chip { padding: .55rem .7rem; }
+    .bar-row .lbl { flex-basis: 74px; font-size: .68rem; }
+  }
 </style>
 </head>
 <body>

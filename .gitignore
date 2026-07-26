@@ -25,3 +25,9 @@ id_ed25519*
 # session/debug droppings
 *.err
 build*.json
+
+# Android build toolchain (local only)
+/tools/
+/android-sdk/
+/.gradle/
+/spotifytool.apk
