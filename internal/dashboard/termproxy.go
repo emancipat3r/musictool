@@ -189,14 +189,6 @@ func (tp *TermProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(webglStub))
 		return
 	}
-	// Client diagnostics sink: the injected overlay POSTs its snapshots here
-	// so `docker logs spotifytool-spotify` shows exactly what the client sees.
-	if r.URL.Path == "/termdiag" && r.Method == http.MethodPost {
-		b, _ := io.ReadAll(io.LimitReader(r.Body, 8192))
-		logx.Infof("termdiag %s: %s", r.RemoteAddr, strings.ReplaceAll(string(b), "\n", " "))
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
 	if err := tp.ensureLogin(); err != nil {
 		logx.Errorf("terminal proxy: %v", err)
 		http.Error(w, "terminal auth bootstrap failed: "+err.Error(), http.StatusServiceUnavailable)
@@ -218,31 +210,29 @@ const webglStub = `// spotifytool stub: WebGL renderer disabled (breaks on Andro
 })();
 `
 
-// diagScript is the injected on-screen diagnostic overlay: WebSocket states
-// (constructor hooked), xterm DOM metrics, font status, and JS errors.
-// Mirrors to POST /termdiag every 5s so `docker logs` captures it too.
+// webviewFixScript is injected into the terminal page to heal Android
+// WebView quirks found via on-device diagnostics:
+//  1. zellij's style.css sizes #terminal with 100vh, which collapses to 0
+//     in WebView, yielding a one-row terminal. Heights get pinned in real
+//     pixels and a resize is dispatched so xterm refits.
+//  2. On narrow screens the 16px default font yields ~47 columns; 12px buys
+//     ~60, which most TUIs (Claude Code included) wrap much better into.
 const diagScript = `<script>
 (function () {
-  var errs = [];
-  window.addEventListener('error', function (e) { errs.push((e.message||'err') + ' @' + (e.filename||'').split('/').pop() + ':' + e.lineno); });
-  var sockets = [];
-  var OW = window.WebSocket;
-  window.WebSocket = function (url, p) {
-    var s = p !== undefined ? new OW(url, p) : new OW(url);
-    var rec = { url: String(url).split('?')[0], state: 'connecting' };
-    sockets.push(rec);
-    s.addEventListener('open', function () { rec.state = 'open'; });
-    s.addEventListener('error', function () { rec.state = 'error'; });
-    s.addEventListener('close', function (e) { rec.state = 'closed(' + e.code + ')'; });
-    return s;
-  };
-  window.WebSocket.prototype = OW.prototype;
-  ['CONNECTING','OPEN','CLOSING','CLOSED'].forEach(function(k){ window.WebSocket[k] = OW[k]; });
+  // Smaller terminal font on phones: hook the Terminal constructor before the
+  // page modules run (this classic script executes pre-module).
+  var OT = window.Terminal;
+  if (OT && window.innerWidth < 700) {
+    window.Terminal = function (opts) {
+      opts = opts || {};
+      if (!opts.fontSize || opts.fontSize > 13) opts.fontSize = 12;
+      return new OT(opts);
+    };
+    window.Terminal.prototype = OT.prototype;
+  }
 
-  // FIX (found via these diagnostics): zellij's style.css sizes body and
-  // #terminal with 100vh, which collapses to 0 on Android WebView — xterm
-  // then builds a ONE-ROW terminal. Pin heights in real pixels and dispatch
-  // resize so the fit addon rebuilds the grid and zellij redraws.
+  // Heal the 100vh collapse: pin pixel heights whenever the container
+  // measures short, then refit.
   function fixHeight() {
     var t = document.getElementById('terminal');
     if (!t) return;
@@ -259,47 +249,5 @@ const diagScript = `<script>
   fixHeight();
   setInterval(fixHeight, 2000);
   window.addEventListener('orientationchange', function () { setTimeout(fixHeight, 400); });
-
-  var div = document.createElement('div');
-  div.style.cssText = 'position:fixed;top:4px;left:4px;right:4px;z-index:99999;background:rgba(20,20,20,.92);color:#9f9;font:11px/1.5 monospace;padding:8px;border:1px solid #4a4;border-radius:6px;pointer-events:none;white-space:pre-wrap;';
-  document.body.appendChild(div);
-  // The overlay is a diagnostic aid: fade it out once things settle.
-  setTimeout(function () { div.style.display = 'none'; }, 25000);
-
-  function snap() {
-    var d = {};
-    d.url = location.pathname;
-    d.viewport = window.innerWidth + 'x' + window.innerHeight + ' dpr=' + devicePixelRatio;
-    d.ws = sockets.map(function (s) { return s.url.split('/').slice(-2).join('/') + '=' + s.state; }).join(' | ') || 'none-yet';
-    var termEl = document.getElementById('terminal');
-    d.termEl = termEl ? (termEl.clientWidth + 'x' + termEl.clientHeight) : 'MISSING';
-    var screen = document.querySelector('.xterm-screen');
-    d.screen = screen ? (screen.clientWidth + 'x' + screen.clientHeight) : 'no-screen';
-    var rows = document.querySelectorAll('.xterm-rows > div');
-    d.rows = rows.length;
-    if (rows.length) {
-      var r0 = rows[0];
-      d.row0 = 'h=' + r0.offsetHeight + ' chars=' + (r0.textContent||'').length + ' txt=' + JSON.stringify((r0.textContent||'').slice(0,40));
-      var mid = rows[Math.floor(rows.length/2)];
-      d.rowMid = 'chars=' + (mid.textContent||'').length;
-    }
-    var xt = document.querySelector('.xterm');
-    if (xt) { var cs = getComputedStyle(xt); d.font = cs.fontFamily.slice(0,40) + ' ' + cs.fontSize; }
-    d.fonts = document.fonts ? document.fonts.status : 'n/a';
-    d.canvases = document.querySelectorAll('canvas').length;
-    d.errs = errs.slice(-4).join(' ;; ') || 'none';
-    return d;
-  }
-
-  function tick() {
-    try {
-      var d = snap();
-      div.textContent = 'DIAG ' + new Date().toISOString().slice(11,19) + '\n' +
-        Object.keys(d).map(function (k) { return k + ': ' + d[k]; }).join('\n');
-      fetch('/termdiag', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(d) }).catch(function(){});
-    } catch (e) { div.textContent = 'DIAG error: ' + e.message; }
-  }
-  try { tick(); } catch (e) {}
-  setInterval(tick, 4000);
 })();
 </script>`
