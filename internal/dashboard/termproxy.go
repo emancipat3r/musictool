@@ -239,9 +239,32 @@ const diagScript = `<script>
   window.WebSocket.prototype = OW.prototype;
   ['CONNECTING','OPEN','CLOSING','CLOSED'].forEach(function(k){ window.WebSocket[k] = OW[k]; });
 
+  // FIX (found via these diagnostics): zellij's style.css sizes body and
+  // #terminal with 100vh, which collapses to 0 on Android WebView — xterm
+  // then builds a ONE-ROW terminal. Pin heights in real pixels and dispatch
+  // resize so the fit addon rebuilds the grid and zellij redraws.
+  function fixHeight() {
+    var t = document.getElementById('terminal');
+    if (!t) return;
+    var h = window.innerHeight;
+    if (t.clientHeight < h - 40) {
+      document.documentElement.style.height = h + 'px';
+      document.body.style.height = h + 'px';
+      document.body.style.margin = '0';
+      t.style.height = h + 'px';
+      t.style.minHeight = h + 'px';
+      window.dispatchEvent(new Event('resize'));
+    }
+  }
+  fixHeight();
+  setInterval(fixHeight, 2000);
+  window.addEventListener('orientationchange', function () { setTimeout(fixHeight, 400); });
+
   var div = document.createElement('div');
   div.style.cssText = 'position:fixed;top:4px;left:4px;right:4px;z-index:99999;background:rgba(20,20,20,.92);color:#9f9;font:11px/1.5 monospace;padding:8px;border:1px solid #4a4;border-radius:6px;pointer-events:none;white-space:pre-wrap;';
   document.body.appendChild(div);
+  // The overlay is a diagnostic aid: fade it out once things settle.
+  setTimeout(function () { div.style.display = 'none'; }, 25000);
 
   function snap() {
     var d = {};
