@@ -8,7 +8,9 @@ import (
 	"context"
 	"encoding/json"
 	"html/template"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/emancipat3r/spotifytool/internal/config"
@@ -51,6 +53,7 @@ func (d *Dashboard) Handler() http.Handler {
 	mux.HandleFunc("/profile", d.handleProfile)
 	mux.HandleFunc("/terminal", d.handleTerminal)
 	mux.HandleFunc("/vote", d.handleVote)
+	mux.HandleFunc("/batch", d.handleBatch)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	return mux
 }
@@ -73,6 +76,10 @@ type pageData struct {
 	RecentSaves []store.CoverRef
 	BatchLabel  string
 	BatchCovers []store.CoverRef
+	SigPos      int
+	SigNeg      int
+	SigPosPct   int
+	SigNegPct   int
 	Profile     string
 	Saved       bool
 	TerminalURL string
@@ -100,6 +107,15 @@ func (d *Dashboard) handleIndex(w http.ResponseWriter, r *http.Request) {
 	saves, _ := d.db.RecentSaveCovers(ctx, 18)
 	batchLabel, batchCovers, _ := d.db.LatestBatchCovers(ctx)
 
+	// Signal balance: positive vs negative event counts for the diverging bar.
+	sigPos := len(sig.NewSaves) + len(sig.Repeats) + len(sig.NewKeepers)
+	sigNeg := len(sig.NewDislikes) + len(sig.NewSkips) + len(sig.IgnoredFromLastBatch)
+	posPct, negPct := 0, 0
+	if total := sigPos + sigNeg; total > 0 {
+		negPct = sigNeg * 100 / total
+		posPct = 100 - negPct
+	}
+
 	data := pageData{
 		Title:       "dashboard",
 		Page:        pageDashboard,
@@ -111,6 +127,10 @@ func (d *Dashboard) handleIndex(w http.ResponseWriter, r *http.Request) {
 		RecentSaves: saves,
 		BatchLabel:  batchLabel,
 		BatchCovers: batchCovers,
+		SigPos:      sigPos,
+		SigNeg:      sigNeg,
+		SigPosPct:   posPct,
+		SigNegPct:   negPct,
 		TerminalURL: d.cfg.TerminalURL,
 	}
 	d.render(w, data)
@@ -145,6 +165,42 @@ func (d *Dashboard) handleVote(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(res)
+}
+
+// handleBatch forwards a manual discovery-batch request to the sandbox's
+// trigger endpoint, which types /discovery-batch into the live claude session
+// (interactive, subscription-billed; no API usage anywhere).
+func (d *Dashboard) handleBatch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if d.cfg.TriggerURL == "" {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "trigger not configured (SPOTIFYTOOL_TRIGGER_URL)"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.cfg.TriggerURL+"/run",
+		strings.NewReader(`{"command":"/discovery-batch"}`))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		logx.Errorf("batch trigger: %v", err)
+		w.WriteHeader(http.StatusBadGateway)
+		json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "sandbox trigger unreachable"})
+		return
+	}
+	defer res.Body.Close()
+	w.WriteHeader(res.StatusCode)
+	io.Copy(w, res.Body)
 }
 
 // handleTerminal renders the service-hatch pane: the terminal at

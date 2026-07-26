@@ -100,11 +100,33 @@ const pageTemplate = `<!doctype html>
   tr:last-child td { border-bottom: 0; }
   th { color: var(--fg-dim); font-weight: 500; font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; }
 
-  .bar-row { display: flex; align-items: center; gap: .6rem; margin: .18rem 0; }
-  .bar-row .lbl { width: 84px; color: var(--fg-dim); font-size: .72rem; font-variant-numeric: tabular-nums; }
-  .bar { height: 12px; border-radius: 6px; min-width: 3px;
+  .bar-row { display: flex; align-items: center; gap: .6rem; margin: .22rem 0; }
+  .bar-row .lbl { flex: 0 0 84px; color: var(--fg-dim); font-size: .72rem; font-variant-numeric: tabular-nums; }
+  /* Fixed track + inner fill: every bar shares the same baseline and scale. */
+  .bar-row .track { flex: 1; height: 12px; border-radius: 6px; background: var(--bg1);
+                    border: 1px solid var(--bg2); overflow: hidden; }
+  .bar-row .track i { display: block; height: 100%; border-radius: 6px;
          background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 65%, var(--bg)) 0%, var(--accent) 100%); }
-  .bar-row .val { color: var(--fg-dim); font-size: .72rem; }
+  .bar-row .val { flex: 0 0 2rem; color: var(--fg-dim); font-size: .72rem; text-align: right; }
+
+  /* Signals: valence-colored stat chips + a diverging balance bar. */
+  .sig-chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: .7rem; }
+  .chip { background: var(--bg1); border: 1px solid var(--bg2); border-radius: 12px;
+          padding: .7rem .85rem; display: flex; align-items: center; gap: .65rem; }
+  .chip .ico { font-size: 1.05rem; width: 1.5rem; text-align: center; }
+  .chip .n { font-size: 1.35rem; font-weight: 650; line-height: 1.1; }
+  .chip .cl { color: var(--fg-dim); font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; }
+  .chip.pos .n, .chip.pos .ico { color: var(--green); }
+  .chip.neg .n, .chip.neg .ico { color: var(--red); }
+  .chip.zero .n, .chip.zero .ico { color: var(--fg-dim); }
+  .balance { display: flex; height: 14px; border-radius: 7px; overflow: hidden; margin-top: .8rem;
+             background: var(--bg1); border: 1px solid var(--bg2); }
+  .balance .neg { background: var(--red); height: 100%; }
+  .balance .pos { background: var(--green); height: 100%; }
+  .balance-cap { color: var(--fg-dim); font-size: .74rem; margin-top: .35rem; }
+  button.mini { margin: 0; padding: .32rem .9rem; font-size: .78rem; font-weight: 600;
+                text-transform: none; letter-spacing: 0; }
+  section h2 .spacer { flex: 1; }
 
   .covers { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: .8rem; }
   .cover { text-decoration: none; }
@@ -225,7 +247,7 @@ const pageTemplate = `<!doctype html>
     <h2>latest batch {{if .BatchLabel}}<span class="muted sub">{{.BatchLabel}} · tap to vote: ✓ keeper, ✗ dislike</span>{{end}}</h2>
     <div class="covers">
       {{range .BatchCovers}}
-        <div class="cover" data-uri="{{.URI}}">
+        <div class="cover" data-track="{{.ID}}">
           {{if .ImageURL}}<img src="{{.ImageURL}}" alt="" loading="lazy">{{else}}<div class="ph">♪</div>{{end}}
           <div class="t">{{.Title}}</div><div class="a">{{.Artist}}</div>
           <div class="votes">
@@ -243,7 +265,7 @@ const pageTemplate = `<!doctype html>
     <h2>recently liked <span class="muted sub">tap to vote</span></h2>
     <div class="covers">
       {{range .RecentSaves}}
-        <div class="cover" data-uri="{{.URI}}">
+        <div class="cover" data-track="{{.ID}}">
           {{if .ImageURL}}<img src="{{.ImageURL}}" alt="" loading="lazy">{{else}}<div class="ph">♪</div>{{end}}
           <div class="t">{{.Title}}</div><div class="a">{{.Artist}}</div>
           <div class="votes">
@@ -262,7 +284,7 @@ const pageTemplate = `<!doctype html>
       {{range .PlayHistory}}
         <div class="bar-row">
           <span class="lbl">{{.Label}}</span>
-          <div class="bar" style="width:{{.Pct}}%"></div>
+          <div class="track"><i style="width:{{.Pct}}%"></i></div>
           <span class="val">{{.Count}}</span>
         </div>
       {{end}}
@@ -270,14 +292,28 @@ const pageTemplate = `<!doctype html>
   </section>
 
   <section>
-    <h2>recent signals <span class="muted sub">{{.Signals.Summary}}</span></h2>
-    <table>
-      <tr><th>new saves</th><td>{{len .Signals.NewSaves}}</td></tr>
-      <tr><th>repeats</th><td>{{len .Signals.Repeats}}</td></tr>
-      <tr><th>new keepers</th><td>{{len .Signals.NewKeepers}}</td></tr>
-      <tr><th>new dislikes</th><td>{{len .Signals.NewDislikes}}</td></tr>
-      <tr><th>ignored from last batch</th><td>{{len .Signals.IgnoredFromLastBatch}}</td></tr>
-    </table>
+    <h2>recent signals <span class="muted sub">since {{.Signals.Since}}</span></h2>
+    <div class="sig-chips">
+      <div class="chip {{if .Signals.NewSaves}}pos{{else}}zero{{end}}"><span class="ico">♥</span>
+        <span><span class="n">{{len .Signals.NewSaves}}</span><br><span class="cl">new saves</span></span></div>
+      <div class="chip {{if .Signals.Repeats}}pos{{else}}zero{{end}}"><span class="ico">↻</span>
+        <span><span class="n">{{len .Signals.Repeats}}</span><br><span class="cl">repeats</span></span></div>
+      <div class="chip {{if .Signals.NewKeepers}}pos{{else}}zero{{end}}"><span class="ico">✓</span>
+        <span><span class="n">{{len .Signals.NewKeepers}}</span><br><span class="cl">new keepers</span></span></div>
+      <div class="chip {{if .Signals.NewDislikes}}neg{{else}}zero{{end}}"><span class="ico">✗</span>
+        <span><span class="n">{{len .Signals.NewDislikes}}</span><br><span class="cl">new dislikes</span></span></div>
+      <div class="chip {{if .Signals.NewSkips}}neg{{else}}zero{{end}}"><span class="ico">⏭</span>
+        <span><span class="n">{{len .Signals.NewSkips}}</span><br><span class="cl">early skips</span></span></div>
+      <div class="chip {{if .Signals.IgnoredFromLastBatch}}neg{{else}}zero{{end}}"><span class="ico">∅</span>
+        <span><span class="n">{{len .Signals.IgnoredFromLastBatch}}</span><br><span class="cl">ignored</span></span></div>
+    </div>
+    {{if or .SigPos .SigNeg}}
+    <div class="balance">
+      <div class="neg" style="width:{{.SigNegPct}}%"></div>
+      <div class="pos" style="width:{{.SigPosPct}}%"></div>
+    </div>
+    <div class="balance-cap">{{.SigPos}} positive · {{.SigNeg}} negative since the last batch</div>
+    {{end}}
   </section>
 
   {{if .TopArtists}}
@@ -298,7 +334,11 @@ const pageTemplate = `<!doctype html>
   {{end}}
 
   <section>
-    <h2>discovery batches</h2>
+    <h2>discovery batches
+      <span class="spacer"></span>
+      <button id="run-batch" class="mini">Run discovery batch</button>
+    </h2>
+    <p class="muted" id="batch-status" style="display:none"></p>
     {{if .Batches}}
     <table>
       <tr><th>label</th><th>when</th><th>tracks</th><th>digest</th></tr>
@@ -326,13 +366,13 @@ const pageTemplate = `<!doctype html>
       var btn = ev.target.closest('.vote');
       if (!btn) return;
       var tile = btn.closest('.cover');
-      if (!tile || !tile.dataset.uri) return;
+      if (!tile || !tile.dataset.track) return;
       var action = btn.classList.contains('keep') ? 'keeper' : 'dislike';
       btn.disabled = true;
       fetch('/vote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uri: tile.dataset.uri, action: action })
+        body: JSON.stringify({ uri: 'spotify:track:' + tile.dataset.track, action: action })
       }).then(function (r) { return r.json(); }).then(function (res) {
         btn.disabled = false;
         if (!res.ok) { alert(res.error || 'vote failed'); return; }
@@ -340,6 +380,21 @@ const pageTemplate = `<!doctype html>
         keep.classList.toggle('on-keep', action === 'keeper');
         nope.classList.toggle('on-nope', action === 'dislike');
       }).catch(function () { btn.disabled = false; alert('vote failed'); });
+    });
+    // Manual discovery batch: types /discovery-batch into the live claude
+    // session (subscription-billed, same as doing it yourself).
+    var rb = document.getElementById('run-batch');
+    if (rb) rb.addEventListener('click', function () {
+      if (!confirm('Send /discovery-batch to the claude session?')) return;
+      rb.disabled = true;
+      var st = document.getElementById('batch-status');
+      fetch('/batch', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (res) {
+        rb.disabled = false;
+        st.style.display = '';
+        st.textContent = res.ok
+          ? 'Command sent to the claude session — watch it run in the Terminal tab.'
+          : 'Failed: ' + (res.error || 'unknown');
+      }).catch(function () { rb.disabled = false; st.style.display = ''; st.textContent = 'Failed: trigger unreachable'; });
     });
   })();
 </script>

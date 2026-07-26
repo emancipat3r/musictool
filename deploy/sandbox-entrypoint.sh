@@ -97,6 +97,10 @@ if [[ ! -s "$TOKEN_FILE" ]] || ! zellij web --list-tokens 2>/dev/null | grep -q 
   fi
 fi
 
+# Trigger endpoint (compose-network only): lets the dashboard's "Run discovery
+# batch" button type the allowlisted slash command into the live session.
+node /usr/local/bin/trigger-server.js &
+
 echo "zellij web serving on https://0.0.0.0:${WEB_PORT} (session: ${SESSION})" >&2
 
 # PID1 watchdog: keep the container up, recreate the session if it dies.

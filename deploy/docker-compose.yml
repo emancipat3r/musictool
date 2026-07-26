@@ -33,6 +33,8 @@ services:
       # token captured on the shared volume, then forwards everything
       # (WebSockets included) with the session cookie attached.
       SPOTIFYTOOL_ZELLIJ_UPSTREAM: https://sandbox:8082
+      # Sandbox trigger endpoint for the dashboard's Run-discovery-batch button.
+      SPOTIFYTOOL_TRIGGER_URL: http://sandbox:8090
       TZ: ${TZ:-America/New_York}
     volumes:
       - state:/data
@@ -77,6 +79,7 @@ services:
     # direct token-login path back as a fallback.
     expose:
       - "8082"
+      - "8090"   # batch trigger (compose network only, allowlisted commands)
     depends_on: [spotify]
 
 networks:

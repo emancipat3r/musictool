@@ -44,6 +44,7 @@ ENV TERM=xterm-256color COLORTERM=truecolor
 # this, every git command fails with "detected dubious ownership".
 RUN git config --global --add safe.directory /workspace
 COPY deploy/sandbox-entrypoint.sh /usr/local/bin/sandbox-entrypoint.sh
+COPY deploy/trigger-server.js /usr/local/bin/trigger-server.js
 RUN chmod +x /usr/local/bin/sandbox-entrypoint.sh
 
 # Zellij web serves HTTPS on this port; reach it only via Tailscale/LAN.

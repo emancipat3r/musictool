@@ -443,6 +443,10 @@ func (s *Store) TopArtistCards(ctx context.Context, limit int) ([]ArtistCard, er
 
 // CoverRef is a dashboard tile: a track with its album art and vote state.
 type CoverRef struct {
+	// ID is what the template embeds (data-track): html/template sanitizes
+	// spotify: URIs in *-uri attributes to #ZgotmplZ, so the client rebuilds
+	// the URI from the bare id.
+	ID       string `json:"id"`
 	URI      string `json:"uri"`
 	Title    string `json:"title"`
 	Artist   string `json:"artist"`
@@ -451,7 +455,7 @@ type CoverRef struct {
 	Disliked bool   `json:"disliked"`
 }
 
-const coverSelect = `SELECT t.uri, t.title, t.primary_artist, COALESCE(al.image_url,''),
+const coverSelect = `SELECT t.id, t.uri, t.title, t.primary_artist, COALESCE(al.image_url,''),
 	EXISTS(SELECT 1 FROM keepers k WHERE k.track_id=t.id),
 	EXISTS(SELECT 1 FROM disliked d WHERE d.track_id=t.id)`
 
@@ -464,7 +468,7 @@ func (s *Store) queryCovers(ctx context.Context, q string, args ...any) ([]Cover
 	out := make([]CoverRef, 0, 18)
 	for rows.Next() {
 		var c CoverRef
-		if err := rows.Scan(&c.URI, &c.Title, &c.Artist, &c.ImageURL, &c.Keeper, &c.Disliked); err != nil {
+		if err := rows.Scan(&c.ID, &c.URI, &c.Title, &c.Artist, &c.ImageURL, &c.Keeper, &c.Disliked); err != nil {
 			return out, err
 		}
 		out = append(out, c)

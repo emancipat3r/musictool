@@ -57,6 +57,12 @@ type Config struct {
 	// control-room layout. Empty hides the pane.
 	TerminalURL string
 
+	// TriggerURL is the sandbox's command-injection endpoint
+	// (SPOTIFYTOOL_TRIGGER_URL, e.g. http://sandbox:8090) used by the
+	// dashboard's "Run discovery batch" button. Empty disables the button's
+	// backend.
+	TriggerURL string
+
 	ConfigDir string // holds token.json
 	DataDir   string // holds the SQLite db, taste profile, digests
 }
@@ -93,6 +99,7 @@ func Load() Config {
 		RefreshToken: strings.TrimSpace(os.Getenv("SPOTIFY_REFRESH_TOKEN")),
 		LastFMKey:    strings.TrimSpace(os.Getenv("LASTFM_API_KEY")),
 		TerminalURL:  strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TERMINAL_URL")),
+		TriggerURL:   strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TRIGGER_URL")),
 		ConfigDir:    configDir(),
 		DataDir:      dataDir(),
 	}
