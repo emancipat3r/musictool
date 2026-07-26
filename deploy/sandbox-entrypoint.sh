@@ -59,8 +59,12 @@ KDL
 fi
 
 # Config drives the web server; the zellij server starts it with the session.
+# default_mode "locked": zellij passes ALL keystrokes through to the pane
+# (Claude Code's Ctrl+O expand, Ctrl+P, etc. work), except Ctrl+G which
+# toggles zellij's own controls when you actually want panes/tabs/scroll.
 cat > "${ZDIR}/config.kdl" <<EOF
 default_layout "claude"
+default_mode "locked"
 web_server true
 web_sharing "on"
 web_server_ip "0.0.0.0"
