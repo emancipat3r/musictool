@@ -26,9 +26,16 @@ type Dashboard struct {
 // New builds a dashboard over the given store.
 func New(db *store.Store, cfg config.Config) *Dashboard {
 	return &Dashboard{
-		db:   db,
-		cfg:  cfg,
-		tmpl: template.Must(template.New("page").Parse(pageTemplate)),
+		db:  db,
+		cfg: cfg,
+		tmpl: template.Must(template.New("page").Funcs(template.FuncMap{
+			"pct": func(n, max int) int {
+				if max <= 0 {
+					return 0
+				}
+				return n * 100 / max
+			},
+		}).Parse(pageTemplate)),
 	}
 }
 
@@ -56,6 +63,8 @@ type pageData struct {
 	Signals     store.RecentSignals
 	Batches     []store.Batch
 	PlayHistory []barRow
+	TopArtists  []store.ArtistCard
+	RecentSaves []store.CoverRef
 	Profile     string
 	Saved       bool
 	TerminalURL string
@@ -79,6 +88,8 @@ func (d *Dashboard) handleIndex(w http.ResponseWriter, r *http.Request) {
 	sig, _ := d.db.Signals(ctx)
 	batches, _ := d.db.ListBatches(ctx, 15)
 	hist, _ := d.db.PlayHistoryDaily(ctx, 30)
+	artists, _ := d.db.TopArtistCards(ctx, 10)
+	saves, _ := d.db.RecentSaveCovers(ctx, 18)
 
 	data := pageData{
 		Title:       "spotifytool",
@@ -87,6 +98,8 @@ func (d *Dashboard) handleIndex(w http.ResponseWriter, r *http.Request) {
 		Signals:     sig,
 		Batches:     batches,
 		PlayHistory: toBars(hist),
+		TopArtists:  artists,
+		RecentSaves: saves,
 		TerminalURL: d.cfg.TerminalURL,
 	}
 	d.render(w, data)

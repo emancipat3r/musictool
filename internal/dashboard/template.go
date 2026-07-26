@@ -1,80 +1,175 @@
 package dashboard
 
-// pageTemplate is the single gruvbox-dark page. Accent is coyote tan (#B49B72),
-// never the orange-gold yellow.
+// pageTemplate is the single-page dashboard. Theming is CSS-variable driven:
+// data-theme on <html> selects a palette, persisted in localStorage, defaulting
+// to gruvbox-coyote (accent #B49B72 — coyote tan, never the orange-gold
+// yellow). Album art hot-links Spotify's image CDN (captured during sync).
 const pageTemplate = `<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="gruvbox-coyote">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · spotifytool</title>
+<script>
+  // Apply the stored theme before first paint to avoid a flash.
+  try {
+    var t = localStorage.getItem('spotifytool-theme');
+    if (t) document.documentElement.dataset.theme = t;
+  } catch (e) {}
+</script>
 <style>
-  :root {
-    --bg: #282828; --bg1: #3c3836; --bg2: #504945;
-    --fg: #ebdbb2; --fg-dim: #a89984;
-    --accent: #B49B72; /* coyote tan */
-    --green: #b8bb26; --red: #fb4934;
+  :root, [data-theme="gruvbox-coyote"] {
+    --bg:#282828; --bg1:#3c3836; --bg2:#504945; --fg:#ebdbb2; --fg-dim:#a89984;
+    --accent:#B49B72; --accent-fg:#1d2021; --green:#b8bb26; --red:#fb4934;
   }
+  [data-theme="gruvbox-classic"] {
+    --bg:#282828; --bg1:#3c3836; --bg2:#504945; --fg:#ebdbb2; --fg-dim:#a89984;
+    --accent:#83a598; --accent-fg:#1d2021; --green:#b8bb26; --red:#fb4934;
+  }
+  [data-theme="catppuccin-mocha"] {
+    --bg:#1e1e2e; --bg1:#313244; --bg2:#45475a; --fg:#cdd6f4; --fg-dim:#a6adc8;
+    --accent:#cba6f7; --accent-fg:#11111b; --green:#a6e3a1; --red:#f38ba8;
+  }
+  [data-theme="nord"] {
+    --bg:#2e3440; --bg1:#3b4252; --bg2:#434c5e; --fg:#eceff4; --fg-dim:#d8dee9;
+    --accent:#88c0d0; --accent-fg:#2e3440; --green:#a3be8c; --red:#bf616a;
+  }
+  [data-theme="dracula"] {
+    --bg:#282a36; --bg1:#343746; --bg2:#44475a; --fg:#f8f8f2; --fg-dim:#a8a8b3;
+    --accent:#bd93f9; --accent-fg:#1e1f29; --green:#50fa7b; --red:#ff5555;
+  }
+  [data-theme="tokyo-night"] {
+    --bg:#1a1b26; --bg1:#24283b; --bg2:#414868; --fg:#c0caf5; --fg-dim:#a9b1d6;
+    --accent:#7aa2f7; --accent-fg:#15161e; --green:#9ece6a; --red:#f7768e;
+  }
+  [data-theme="catppuccin-latte"] {
+    --bg:#eff1f5; --bg1:#e6e9ef; --bg2:#ccd0da; --fg:#4c4f69; --fg-dim:#6c6f85;
+    --accent:#8839ef; --accent-fg:#eff1f5; --green:#40a02b; --red:#d20f39;
+  }
+
   * { box-sizing: border-box; }
+  html { scrollbar-color: var(--bg2) var(--bg); }
   body { margin: 0; background: var(--bg); color: var(--fg);
-         font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  /* Links are always accent-on-dark; never browser-default blue. */
+         font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif; }
   a, a:visited { color: var(--accent); }
   a:hover { color: var(--fg); }
-  header { border-bottom: 2px solid var(--accent); padding: 1rem 1.5rem;
-           display: flex; align-items: center; gap: 1.5rem; }
-  header h1 { margin: 0; font-size: 1.2rem; color: var(--accent); letter-spacing: .04em; }
-  header a, header a:visited { color: var(--fg-dim); text-decoration: none; }
-  header a:hover, header a.active { color: var(--accent); }
-  main { max-width: 960px; margin: 0 auto; padding: 1.5rem; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; }
-  .card { background: var(--bg1); border-radius: 8px; padding: 1rem; }
-  .card .n { font-size: 1.7rem; color: var(--accent); font-weight: 600; }
-  .card .l { color: var(--fg-dim); font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
-  section { margin-top: 2rem; }
-  section h2 { font-size: 1rem; color: var(--fg-dim); text-transform: uppercase;
-               letter-spacing: .06em; border-bottom: 1px solid var(--bg2); padding-bottom: .4rem; }
-  table { width: 100%; border-collapse: collapse; }
-  td, th { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--bg1); }
-  th { color: var(--fg-dim); font-weight: 500; font-size: .8rem; }
-  .bar-row { display: flex; align-items: center; gap: .6rem; margin: .15rem 0; }
-  .bar-row .lbl { width: 90px; color: var(--fg-dim); font-size: .75rem; font-variant-numeric: tabular-nums; }
-  .bar { height: 14px; background: var(--accent); border-radius: 3px; min-width: 2px; }
-  .bar-row .val { color: var(--fg-dim); font-size: .75rem; }
-  .muted { color: var(--fg-dim); }
-  textarea { width: 100%; min-height: 60vh; background: var(--bg1); color: var(--fg);
-             border: 1px solid var(--bg2); border-radius: 8px; padding: 1rem;
-             font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
-  button { background: var(--accent); color: #1d2021; border: 0; border-radius: 6px;
-           padding: .5rem 1.1rem; font-weight: 600; cursor: pointer; margin-top: .75rem; }
-  .saved { color: var(--green); margin-left: 1rem; }
-  .pill { display:inline-block; background: var(--bg2); border-radius: 999px;
-          padding: .05rem .5rem; font-size: .75rem; color: var(--fg-dim); }
+
+  header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center;
+           gap: 1rem; padding: .65rem 1.25rem;
+           background: color-mix(in srgb, var(--bg) 82%, transparent);
+           backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+           border-bottom: 1px solid var(--bg2); }
+  .brand { display: flex; align-items: center; gap: .55rem; margin-right: .5rem; }
+  .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent);
+                box-shadow: 0 0 10px var(--accent); }
+  .brand h1 { margin: 0; font-size: 1.05rem; letter-spacing: .04em; color: var(--fg); }
+  nav { display: flex; gap: .4rem; flex-wrap: wrap; }
+  .nav-btn { display: inline-block; padding: .38rem .95rem; border-radius: 999px;
+             background: var(--bg1); color: var(--fg-dim) !important;
+             text-decoration: none; font-size: .85rem; font-weight: 500;
+             border: 1px solid transparent; transition: all .15s ease; }
+  .nav-btn:hover { color: var(--fg) !important; border-color: var(--bg2); transform: translateY(-1px); }
+  .nav-btn.active { background: var(--accent); color: var(--accent-fg) !important; font-weight: 600; }
+  .spacer { flex: 1; }
+  .theme-pick { display: flex; align-items: center; gap: .45rem; color: var(--fg-dim); font-size: .78rem; }
+  select { background: var(--bg1); color: var(--fg); border: 1px solid var(--bg2);
+           border-radius: 8px; padding: .32rem .5rem; font-size: .82rem; cursor: pointer; }
+
+  main { max-width: 1020px; margin: 0 auto; padding: 1.4rem 1.25rem 3rem; }
   main.wide { max-width: none; }
-  .term iframe { width: 100%; height: calc(100vh - 180px); border: 1px solid var(--bg2);
-                 border-radius: 8px; background: #1d2021; }
-  code { background: var(--bg1); border-radius: 4px; padding: .1rem .35rem;
-         font-size: .85em; color: var(--accent); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .8rem; }
+  .card { background: var(--bg1); border: 1px solid var(--bg2); border-radius: 14px;
+          padding: .95rem 1rem; transition: transform .15s ease; }
+  .card:hover { transform: translateY(-2px); }
+  .card .n { font-size: 1.65rem; color: var(--accent); font-weight: 650; line-height: 1.2; }
+  .card .l { color: var(--fg-dim); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; margin-top: .15rem; }
+
+  section { margin-top: 2.1rem; }
+  section h2 { font-size: .82rem; color: var(--fg-dim); text-transform: uppercase;
+               letter-spacing: .1em; font-weight: 600; margin-bottom: .8rem;
+               display: flex; align-items: baseline; gap: .7rem; }
+  section h2 .sub { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: .78rem; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--bg1);
+          border: 1px solid var(--bg2); border-radius: 12px; overflow: hidden; }
+  td, th { text-align: left; padding: .5rem .8rem; border-bottom: 1px solid var(--bg2); }
+  tr:last-child td { border-bottom: 0; }
+  th { color: var(--fg-dim); font-weight: 500; font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; }
+
+  .bar-row { display: flex; align-items: center; gap: .6rem; margin: .18rem 0; }
+  .bar-row .lbl { width: 84px; color: var(--fg-dim); font-size: .72rem; font-variant-numeric: tabular-nums; }
+  .bar { height: 12px; border-radius: 6px; min-width: 3px;
+         background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 65%, var(--bg)) 0%, var(--accent) 100%); }
+  .bar-row .val { color: var(--fg-dim); font-size: .72rem; }
+
+  .covers { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: .8rem; }
+  .cover { text-decoration: none; }
+  .cover img, .cover .ph { width: 100%; aspect-ratio: 1; border-radius: 10px; object-fit: cover;
+               border: 1px solid var(--bg2); display: block;
+               transition: transform .15s ease; background: var(--bg1); }
+  .cover:hover img { transform: scale(1.04); }
+  .cover .ph { display: flex; align-items: center; justify-content: center; color: var(--fg-dim); font-size: 1.4rem; }
+  .cover .t { font-size: .72rem; color: var(--fg); margin-top: .35rem; white-space: nowrap;
+              overflow: hidden; text-overflow: ellipsis; }
+  .cover .a { font-size: .68rem; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .artists { display: flex; flex-direction: column; gap: .45rem; }
+  .artist-row { display: flex; align-items: center; gap: .8rem; background: var(--bg1);
+                border: 1px solid var(--bg2); border-radius: 12px; padding: .45rem .7rem; }
+  .artist-row img, .artist-row .ph { width: 42px; height: 42px; border-radius: 50%; object-fit: cover;
+                     background: var(--bg2); }
+  .artist-row .ph { display: flex; align-items: center; justify-content: center; color: var(--fg-dim); }
+  .artist-row .name { flex: 0 0 180px; font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .artist-row .depth { flex: 1; height: 8px; border-radius: 4px; background: var(--bg2); overflow: hidden; }
+  .artist-row .depth i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+  .artist-row .cnt { color: var(--fg-dim); font-size: .78rem; width: 2.2rem; text-align: right; }
+
+  .muted { color: var(--fg-dim); }
+  .pill { display: inline-block; background: var(--bg1); border: 1px solid var(--bg2);
+          border-radius: 999px; padding: .1rem .6rem; font-size: .74rem; color: var(--fg-dim); }
+  textarea { width: 100%; min-height: 60vh; background: var(--bg1); color: var(--fg);
+             border: 1px solid var(--bg2); border-radius: 12px; padding: 1rem;
+             font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  button { background: var(--accent); color: var(--accent-fg); border: 0; border-radius: 10px;
+           padding: .55rem 1.2rem; font-weight: 600; cursor: pointer; margin-top: .75rem;
+           transition: transform .12s ease; }
+  button:hover { transform: translateY(-1px); }
+  .saved { color: var(--green); margin-left: 1rem; }
+  .term iframe { width: 100%; height: calc(100vh - 170px); border: 1px solid var(--bg2);
+                 border-radius: 12px; background: #14151a; }
+  code { background: var(--bg1); border: 1px solid var(--bg2); border-radius: 6px;
+         padding: .08rem .38rem; font-size: .85em; color: var(--accent); }
 </style>
 </head>
 <body>
 <header>
-  <h1>spotifytool</h1>
+  <div class="brand"><span class="dot"></span><h1>spotifytool</h1></div>
   <nav>
-    <a href="/" {{if eq .Page "dashboard"}}class="active"{{end}}>dashboard</a>
-    &nbsp;·&nbsp;
-    <a href="/profile" {{if eq .Page "profile"}}class="active"{{end}}>taste profile</a>
-    &nbsp;·&nbsp;
-    <a href="/terminal" {{if eq .Page "terminal"}}class="active"{{end}}>terminal</a>
-    {{if .TerminalURL}}&nbsp;·&nbsp;<a href="{{.TerminalURL}}" target="_blank" rel="noopener">open session ↗</a>{{end}}
+    <a class="nav-btn {{if eq .Page "dashboard"}}active{{end}}" href="/">Dashboard</a>
+    <a class="nav-btn {{if eq .Page "profile"}}active{{end}}" href="/profile">Taste Profile</a>
+    <a class="nav-btn {{if eq .Page "terminal"}}active{{end}}" href="/terminal">Terminal</a>
+    {{if .TerminalURL}}<a class="nav-btn" href="{{.TerminalURL}}" target="_blank" rel="noopener">Session ↗</a>{{end}}
   </nav>
+  <div class="spacer"></div>
+  <label class="theme-pick">theme
+    <select id="theme">
+      <option value="gruvbox-coyote">Gruvbox Coyote</option>
+      <option value="gruvbox-classic">Gruvbox Classic</option>
+      <option value="catppuccin-mocha">Catppuccin Mocha</option>
+      <option value="nord">Nord</option>
+      <option value="dracula">Dracula</option>
+      <option value="tokyo-night">Tokyo Night</option>
+      <option value="catppuccin-latte">Catppuccin Latte</option>
+    </select>
+  </label>
 </header>
 <main {{if eq .Page "terminal"}}class="wide"{{end}}>
 {{if eq .Page "terminal"}}
   {{if .TerminalURL}}
     <section class="term">
       <h2>claude session
-        <span class="muted" style="font-size:.8rem;text-transform:none">
+        <span class="muted sub">
           same conversation as <code>zellij attach</code> over Tailscale SSH and the mobile app ·
           <a href="{{.TerminalURL}}" target="_blank" rel="noopener">open full-screen ↗</a>
         </span>
@@ -87,9 +182,8 @@ const pageTemplate = `<!doctype html>
   {{else}}
     <section>
       <h2>terminal not configured</h2>
-      <p class="muted">Set <code>SPOTIFYTOOL_TERMINAL_URL</code> to the Zellij web client address
-         (e.g. <code>https://homelab.your-tailnet.ts.net:8082</code>) and restart
-         <code>spotifytool serve</code>. The compose file wires this from <code>.env</code>.</p>
+      <p class="muted">Set <code>SPOTIFYTOOL_TERMINAL_URL</code> to the terminal proxy address and
+         restart <code>spotifytool serve</code>. The compose file wires this from <code>.env</code>.</p>
     </section>
   {{end}}
 {{else if eq .Page "profile"}}
@@ -108,15 +202,30 @@ const pageTemplate = `<!doctype html>
     <div class="card"><div class="n">{{.Stats.Artists}}</div><div class="l">artists</div></div>
     <div class="card"><div class="n">{{.Stats.PlayEvents}}</div><div class="l">plays logged</div></div>
     <div class="card"><div class="n">{{.Stats.Keepers}}</div><div class="l">keepers</div></div>
-    <div class="card"><div class="n">{{.Stats.RecentAdds30d}}</div><div class="l">saves / 30d</div></div>
+    <div class="card"><div class="n">{{.Stats.Disliked}}</div><div class="l">disliked</div></div>
   </div>
-  <p class="muted" style="margin-top:.8rem">
-    last sync: <span class="pill">{{if .Stats.LastSync}}{{.Stats.LastSync}}{{else}}never{{end}}</span>
-    last batch: <span class="pill">{{if .Stats.LastBatch}}{{.Stats.LastBatch}}{{else}}never{{end}}</span>
+  <p class="muted" style="margin-top:.9rem">
+    last sync <span class="pill">{{if .Stats.LastSync}}{{.Stats.LastSync}}{{else}}never{{end}}</span>
+    last batch <span class="pill">{{if .Stats.LastBatch}}{{.Stats.LastBatch}}{{else}}never{{end}}</span>
+    <span class="pill">{{.Stats.RecentAdds30d}} saves / 30d</span>
   </p>
 
+  {{if .RecentSaves}}
   <section>
-    <h2>plays · last 30 days</h2>
+    <h2>recently liked</h2>
+    <div class="covers">
+      {{range .RecentSaves}}
+        <div class="cover">
+          {{if .ImageURL}}<img src="{{.ImageURL}}" alt="" loading="lazy">{{else}}<div class="ph">♪</div>{{end}}
+          <div class="t">{{.Title}}</div><div class="a">{{.Artist}}</div>
+        </div>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+
+  <section>
+    <h2>plays <span class="muted sub">last 30 days</span></h2>
     {{if .PlayHistory}}
       {{range .PlayHistory}}
         <div class="bar-row">
@@ -129,24 +238,32 @@ const pageTemplate = `<!doctype html>
   </section>
 
   <section>
-    <h2>recent signals <span class="muted" style="font-size:.8rem;text-transform:none">{{.Signals.Summary}}</span></h2>
+    <h2>recent signals <span class="muted sub">{{.Signals.Summary}}</span></h2>
     <table>
       <tr><th>new saves</th><td>{{len .Signals.NewSaves}}</td></tr>
       <tr><th>repeats</th><td>{{len .Signals.Repeats}}</td></tr>
       <tr><th>new keepers</th><td>{{len .Signals.NewKeepers}}</td></tr>
+      <tr><th>new dislikes</th><td>{{len .Signals.NewDislikes}}</td></tr>
       <tr><th>ignored from last batch</th><td>{{len .Signals.IgnoredFromLastBatch}}</td></tr>
     </table>
   </section>
 
+  {{if .TopArtists}}
   <section>
-    <h2>top artists</h2>
-    {{if .Stats.TopArtists}}
-    <table>
-      <tr><th>artist</th><th>liked tracks</th></tr>
-      {{range .Stats.TopArtists}}<tr><td>{{.Name}}</td><td>{{.Count}}</td></tr>{{end}}
-    </table>
-    {{else}}<p class="muted">No data yet.</p>{{end}}
+    <h2>top artists <span class="muted sub">by liked-track depth</span></h2>
+    <div class="artists">
+      {{$max := 1}}{{range .TopArtists}}{{if gt .Count $max}}{{$max = .Count}}{{end}}{{end}}
+      {{range .TopArtists}}
+        <div class="artist-row">
+          {{if .ImageURL}}<img src="{{.ImageURL}}" alt="" loading="lazy">{{else}}<div class="ph">♪</div>{{end}}
+          <span class="name">{{.Name}}</span>
+          <div class="depth"><i style="width:{{pct .Count $max}}%"></i></div>
+          <span class="cnt">{{.Count}}</span>
+        </div>
+      {{end}}
+    </div>
   </section>
+  {{end}}
 
   <section>
     <h2>discovery batches</h2>
@@ -162,5 +279,16 @@ const pageTemplate = `<!doctype html>
   </section>
 {{end}}
 </main>
+<script>
+  (function () {
+    var sel = document.getElementById('theme');
+    if (!sel) return;
+    try { sel.value = localStorage.getItem('spotifytool-theme') || 'gruvbox-coyote'; } catch (e) {}
+    sel.addEventListener('change', function () {
+      document.documentElement.dataset.theme = sel.value;
+      try { localStorage.setItem('spotifytool-theme', sel.value); } catch (e) {}
+    });
+  })();
+</script>
 </body>
 </html>`

@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS artists (
 CREATE TABLE IF NOT EXISTS albums (
     id           TEXT PRIMARY KEY,
     name         TEXT NOT NULL,
-    release_date TEXT
+    release_date TEXT,
+    image_url    TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tracks (

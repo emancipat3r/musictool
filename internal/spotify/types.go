@@ -15,6 +15,26 @@ type apiAlbum struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	ReleaseDate string `json:"release_date"`
+	Images      []struct {
+		URL    string `json:"url"`
+		Width  int    `json:"width"`
+		Height int    `json:"height"`
+	} `json:"images"`
+}
+
+// imageURL picks a mid-size cover (~300px) when available, falling back to
+// whatever exists. Spotify serves 640/300/64 variants.
+func (a apiAlbum) imageURL() string {
+	best := ""
+	for _, img := range a.Images {
+		if img.URL == "" {
+			continue
+		}
+		if best == "" || (img.Width >= 250 && img.Width <= 350) {
+			best = img.URL
+		}
+	}
+	return best
 }
 
 type apiExternalIDs struct {
@@ -43,7 +63,7 @@ func (t apiTrack) toModel() model.Track {
 		URI:        t.URI,
 		Title:      t.Name,
 		Artists:    artists,
-		Album:      model.Album{ID: t.Album.ID, Name: t.Album.Name, ReleaseDate: t.Album.ReleaseDate},
+		Album:      model.Album{ID: t.Album.ID, Name: t.Album.Name, ReleaseDate: t.Album.ReleaseDate, ImageURL: t.Album.imageURL()},
 		DurationMs: t.DurationMs,
 		Popularity: t.Popularity,
 		ISRC:       t.ExternalIDs.ISRC,

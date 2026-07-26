@@ -395,6 +395,78 @@ func (s *Store) ListBatches(ctx context.Context, limit int) ([]Batch, error) {
 	return out, rows.Err()
 }
 
+// ArtistCard is a dashboard row: artist depth plus a representative cover.
+type ArtistCard struct {
+	Name     string `json:"name"`
+	Count    int    `json:"count"`
+	ImageURL string `json:"image_url,omitempty"`
+}
+
+// TopArtistCards returns the deepest liked artists with a representative album
+// image (dashboard only; MCP outputs stay compact).
+func (s *Store) TopArtistCards(ctx context.Context, limit int) ([]ArtistCard, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT t.primary_artist, COUNT(*) c,
+		        COALESCE((SELECT al.image_url FROM tracks t2
+		                  JOIN albums al ON al.id = t2.album_id
+		                  WHERE t2.primary_artist = t.primary_artist
+		                    AND COALESCE(al.image_url,'') <> ''
+		                  LIMIT 1), '')
+		 FROM tracks t JOIN saved_tracks s ON s.track_id = t.id
+		 WHERE t.primary_artist <> ''
+		 GROUP BY t.primary_artist ORDER BY c DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]ArtistCard, 0, limit)
+	for rows.Next() {
+		var a ArtistCard
+		if err := rows.Scan(&a.Name, &a.Count, &a.ImageURL); err != nil {
+			return out, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// CoverRef is a dashboard tile: a track with its album art.
+type CoverRef struct {
+	Title    string `json:"title"`
+	Artist   string `json:"artist"`
+	ImageURL string `json:"image_url,omitempty"`
+}
+
+// RecentSaveCovers returns the latest liked songs with album art for the
+// dashboard's cover grid.
+func (s *Store) RecentSaveCovers(ctx context.Context, limit int) ([]CoverRef, error) {
+	if limit <= 0 {
+		limit = 18
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT t.title, t.primary_artist, COALESCE(al.image_url,'')
+		 FROM saved_tracks s
+		 JOIN tracks t ON t.id = s.track_id
+		 LEFT JOIN albums al ON al.id = t.album_id
+		 ORDER BY s.saved_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]CoverRef, 0, limit)
+	for rows.Next() {
+		var c CoverRef
+		if err := rows.Scan(&c.Title, &c.Artist, &c.ImageURL); err != nil {
+			return out, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 // PlayHistoryDaily returns per-day play counts for the last n days (dashboard).
 func (s *Store) PlayHistoryDaily(ctx context.Context, days int) ([]Count, error) {
 	if days <= 0 {

@@ -42,10 +42,12 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
-	// Migration for databases created before track_json existed; the error on
-	// an already-migrated schema is expected and ignored.
+	// Migrations for databases created before these columns existed; the
+	// error on an already-migrated schema is expected and ignored.
 	_, _ = db.ExecContext(context.Background(),
 		`ALTER TABLE resolution_cache ADD COLUMN track_json TEXT`)
+	_, _ = db.ExecContext(context.Background(),
+		`ALTER TABLE albums ADD COLUMN image_url TEXT`)
 	return &Store{db: db}, nil
 }
 
@@ -60,9 +62,11 @@ func upsertTrackTx(ctx context.Context, tx *sql.Tx, t model.Track) error {
 	now := nowRFC3339()
 	if t.Album.ID != "" {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO albums(id,name,release_date) VALUES(?,?,?)
-			 ON CONFLICT(id) DO UPDATE SET name=excluded.name, release_date=excluded.release_date`,
-			t.Album.ID, t.Album.Name, t.Album.ReleaseDate); err != nil {
+			`INSERT INTO albums(id,name,release_date,image_url) VALUES(?,?,?,?)
+			 ON CONFLICT(id) DO UPDATE SET name=excluded.name,
+			   release_date=excluded.release_date,
+			   image_url=CASE WHEN excluded.image_url<>'' THEN excluded.image_url ELSE albums.image_url END`,
+			t.Album.ID, t.Album.Name, t.Album.ReleaseDate, t.Album.ImageURL); err != nil {
 			return err
 		}
 	}

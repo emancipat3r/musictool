@@ -17,6 +17,7 @@ type Album struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	ReleaseDate string `json:"release_date,omitempty"`
+	ImageURL    string `json:"image_url,omitempty"`
 }
 
 // Track is the compact track shape used everywhere in spotifytool. It carries
