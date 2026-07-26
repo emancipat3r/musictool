@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -61,6 +62,8 @@ func NewTermProxy(upstream, tokenPath string) (*TermProxy, error) {
 	rp.Director = func(r *http.Request) {
 		baseDirector(r)
 		r.Host = u.Host
+		// Identity encoding so HTML responses can be inspected/injected.
+		r.Header.Del("Accept-Encoding")
 		for _, c := range tp.snapshotCookies() {
 			r.AddCookie(c)
 		}
@@ -81,8 +84,8 @@ func (tp *TermProxy) snapshotCookies() []*http.Cookie {
 }
 
 // onResponse absorbs upstream cookies into the server-side jar (they never
-// reach the browser) and resets the session on auth failures so the next
-// request re-logs-in.
+// reach the browser), resets the session on auth failures so the next
+// request re-logs-in, and injects the diagnostic overlay into HTML pages.
 func (tp *TermProxy) onResponse(res *http.Response) error {
 	if sc := res.Cookies(); len(sc) > 0 {
 		tp.mu.Lock()
@@ -97,6 +100,19 @@ func (tp *TermProxy) onResponse(res *http.Response) error {
 		tp.mu.Lock()
 		tp.cookies = nil
 		tp.mu.Unlock()
+	}
+	// Inject the on-screen diagnostics into the terminal page so client-side
+	// failures are visible in a screenshot and mirrored to server logs.
+	if res.StatusCode == 200 && strings.HasPrefix(res.Header.Get("Content-Type"), "text/html") {
+		body, err := io.ReadAll(res.Body)
+		res.Body.Close()
+		if err != nil {
+			return err
+		}
+		injected := bytes.Replace(body, []byte("</body>"), []byte(diagScript+"</body>"), 1)
+		res.Body = io.NopCloser(bytes.NewReader(injected))
+		res.ContentLength = int64(len(injected))
+		res.Header.Set("Content-Length", fmt.Sprintf("%d", len(injected)))
 	}
 	return nil
 }
@@ -173,6 +189,14 @@ func (tp *TermProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(webglStub))
 		return
 	}
+	// Client diagnostics sink: the injected overlay POSTs its snapshots here
+	// so `docker logs spotifytool-spotify` shows exactly what the client sees.
+	if r.URL.Path == "/termdiag" && r.Method == http.MethodPost {
+		b, _ := io.ReadAll(io.LimitReader(r.Body, 8192))
+		logx.Infof("termdiag %s: %s", r.RemoteAddr, strings.ReplaceAll(string(b), "\n", " "))
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if err := tp.ensureLogin(); err != nil {
 		logx.Errorf("terminal proxy: %v", err)
 		http.Error(w, "terminal auth bootstrap failed: "+err.Error(), http.StatusServiceUnavailable)
@@ -193,3 +217,66 @@ const webglStub = `// spotifytool stub: WebGL renderer disabled (breaks on Andro
   window.WebglAddon = { WebglAddon: WebglAddon };
 })();
 `
+
+// diagScript is the injected on-screen diagnostic overlay: WebSocket states
+// (constructor hooked), xterm DOM metrics, font status, and JS errors.
+// Mirrors to POST /termdiag every 5s so `docker logs` captures it too.
+const diagScript = `<script>
+(function () {
+  var errs = [];
+  window.addEventListener('error', function (e) { errs.push((e.message||'err') + ' @' + (e.filename||'').split('/').pop() + ':' + e.lineno); });
+  var sockets = [];
+  var OW = window.WebSocket;
+  window.WebSocket = function (url, p) {
+    var s = p !== undefined ? new OW(url, p) : new OW(url);
+    var rec = { url: String(url).split('?')[0], state: 'connecting' };
+    sockets.push(rec);
+    s.addEventListener('open', function () { rec.state = 'open'; });
+    s.addEventListener('error', function () { rec.state = 'error'; });
+    s.addEventListener('close', function (e) { rec.state = 'closed(' + e.code + ')'; });
+    return s;
+  };
+  window.WebSocket.prototype = OW.prototype;
+  ['CONNECTING','OPEN','CLOSING','CLOSED'].forEach(function(k){ window.WebSocket[k] = OW[k]; });
+
+  var div = document.createElement('div');
+  div.style.cssText = 'position:fixed;top:4px;left:4px;right:4px;z-index:99999;background:rgba(20,20,20,.92);color:#9f9;font:11px/1.5 monospace;padding:8px;border:1px solid #4a4;border-radius:6px;pointer-events:none;white-space:pre-wrap;';
+  document.body.appendChild(div);
+
+  function snap() {
+    var d = {};
+    d.url = location.pathname;
+    d.viewport = window.innerWidth + 'x' + window.innerHeight + ' dpr=' + devicePixelRatio;
+    d.ws = sockets.map(function (s) { return s.url.split('/').slice(-2).join('/') + '=' + s.state; }).join(' | ') || 'none-yet';
+    var termEl = document.getElementById('terminal');
+    d.termEl = termEl ? (termEl.clientWidth + 'x' + termEl.clientHeight) : 'MISSING';
+    var screen = document.querySelector('.xterm-screen');
+    d.screen = screen ? (screen.clientWidth + 'x' + screen.clientHeight) : 'no-screen';
+    var rows = document.querySelectorAll('.xterm-rows > div');
+    d.rows = rows.length;
+    if (rows.length) {
+      var r0 = rows[0];
+      d.row0 = 'h=' + r0.offsetHeight + ' chars=' + (r0.textContent||'').length + ' txt=' + JSON.stringify((r0.textContent||'').slice(0,40));
+      var mid = rows[Math.floor(rows.length/2)];
+      d.rowMid = 'chars=' + (mid.textContent||'').length;
+    }
+    var xt = document.querySelector('.xterm');
+    if (xt) { var cs = getComputedStyle(xt); d.font = cs.fontFamily.slice(0,40) + ' ' + cs.fontSize; }
+    d.fonts = document.fonts ? document.fonts.status : 'n/a';
+    d.canvases = document.querySelectorAll('canvas').length;
+    d.errs = errs.slice(-4).join(' ;; ') || 'none';
+    return d;
+  }
+
+  function tick() {
+    try {
+      var d = snap();
+      div.textContent = 'DIAG ' + new Date().toISOString().slice(11,19) + '\n' +
+        Object.keys(d).map(function (k) { return k + ': ' + d[k]; }).join('\n');
+      fetch('/termdiag', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(d) }).catch(function(){});
+    } catch (e) { div.textContent = 'DIAG error: ' + e.message; }
+  }
+  try { tick(); } catch (e) {}
+  setInterval(tick, 4000);
+})();
+</script>`
