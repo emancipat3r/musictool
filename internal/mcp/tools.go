@@ -284,6 +284,32 @@ func Tools(svc *service.Service) []Tool {
 			},
 		},
 		{
+			Name:        "get_taste_deltas",
+			Description: "Evidence-weighted per-artist affinity from all feedback channels (Keeper/Disliked votes, saves, listen telemetry: completions, restarts, skips). Explicit votes never decay; implicit evidence has a 180-day half-life. Trend thresholds (already applied): rising = affinity >= 2 with >= 3 positive events; falling = affinity <= -1.5 with >= 2 negative events, at least one explicit OR a second independent early skip — a single skip NEVER demotes (skips correlate with engagement). Use this to update the taste profile's signals:auto section; evidence counts are included so claims can be justified.",
+			InputSchema: obj(map[string]any{"limit": intProp("max artists (default 30)")}),
+			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
+				var a struct {
+					Limit int `json:"limit"`
+				}
+				_ = json.Unmarshal(args, &a)
+				limit := a.Limit
+				if limit <= 0 || limit > 100 {
+					limit = 30
+				}
+				deltas, err := svc.DB.TasteDeltas(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if len(deltas) > limit {
+					deltas = deltas[:limit]
+				}
+				return map[string]any{
+					"artists": deltas,
+					"note":    "affinity = weighted, time-decayed evidence; see tool description for thresholds",
+				}, nil
+			},
+		},
+		{
 			Name:        "get_batches",
 			Description: "Recent discovery batches (label, playlist id, when, track count, digest) so a new batch can avoid repeating what already shipped.",
 			InputSchema: obj(map[string]any{"limit": intProp("max rows (default 20)")}),

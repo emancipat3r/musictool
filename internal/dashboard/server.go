@@ -6,6 +6,7 @@ package dashboard
 
 import (
 	"context"
+	"encoding/json"
 	"html/template"
 	"net/http"
 	"time"
@@ -13,20 +14,24 @@ import (
 	"github.com/emancipat3r/spotifytool/internal/config"
 	"github.com/emancipat3r/spotifytool/internal/logx"
 	"github.com/emancipat3r/spotifytool/internal/profile"
+	"github.com/emancipat3r/spotifytool/internal/service"
 	"github.com/emancipat3r/spotifytool/internal/store"
 )
 
 // Dashboard serves the read-only UI.
 type Dashboard struct {
+	svc  *service.Service
 	db   *store.Store
 	cfg  config.Config
 	tmpl *template.Template
 }
 
-// New builds a dashboard over the given store.
-func New(db *store.Store, cfg config.Config) *Dashboard {
+// New builds a dashboard over the service (queries via its store; votes via
+// its Spotify write path).
+func New(svc *service.Service, cfg config.Config) *Dashboard {
 	return &Dashboard{
-		db:  db,
+		svc: svc,
+		db:  svc.DB,
 		cfg: cfg,
 		tmpl: template.Must(template.New("page").Funcs(template.FuncMap{
 			"pct": func(n, max int) int {
@@ -45,6 +50,7 @@ func (d *Dashboard) Handler() http.Handler {
 	mux.HandleFunc("/", d.handleIndex)
 	mux.HandleFunc("/profile", d.handleProfile)
 	mux.HandleFunc("/terminal", d.handleTerminal)
+	mux.HandleFunc("/vote", d.handleVote)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	return mux
 }
@@ -65,6 +71,8 @@ type pageData struct {
 	PlayHistory []barRow
 	TopArtists  []store.ArtistCard
 	RecentSaves []store.CoverRef
+	BatchLabel  string
+	BatchCovers []store.CoverRef
 	Profile     string
 	Saved       bool
 	TerminalURL string
@@ -90,9 +98,10 @@ func (d *Dashboard) handleIndex(w http.ResponseWriter, r *http.Request) {
 	hist, _ := d.db.PlayHistoryDaily(ctx, 30)
 	artists, _ := d.db.TopArtistCards(ctx, 10)
 	saves, _ := d.db.RecentSaveCovers(ctx, 18)
+	batchLabel, batchCovers, _ := d.db.LatestBatchCovers(ctx)
 
 	data := pageData{
-		Title:       "spotifytool",
+		Title:       "dashboard",
 		Page:        pageDashboard,
 		Stats:       stats,
 		Signals:     sig,
@@ -100,9 +109,42 @@ func (d *Dashboard) handleIndex(w http.ResponseWriter, r *http.Request) {
 		PlayHistory: toBars(hist),
 		TopArtists:  artists,
 		RecentSaves: saves,
+		BatchLabel:  batchLabel,
+		BatchCovers: batchCovers,
 		TerminalURL: d.cfg.TerminalURL,
 	}
 	d.render(w, data)
+}
+
+// handleVote records an explicit vote: the canonical write goes to the real
+// Keepers/Disliked playlist via the service, keeping Spotify the source of
+// truth. This is the one music-state mutation the dashboard performs, at the
+// user's explicit request.
+func (d *Dashboard) handleVote(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		URI    string `json:"uri"`
+		Action string `json:"action"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad body", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	res, err := d.svc.Vote(ctx, body.URI, body.Action)
+	if err != nil {
+		logx.Errorf("vote: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(res)
 }
 
 // handleTerminal renders the service-hatch pane: the terminal at

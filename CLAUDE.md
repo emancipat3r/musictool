@@ -32,6 +32,30 @@ connector.
   compression of the whole library into a few KB: pillars, texture
   preferences, artist tiers (core / worn-out / no, with exceptions), context
   notes.
+
+### Signal-driven iteration (the auto block)
+
+The profile contains a block delimited by `<!-- signals:auto -->` and
+`<!-- /signals:auto -->`. That block — and ONLY that block — is yours to
+regenerate from `get_taste_deltas`, during `/discovery-batch` or whenever the
+user asks. Everything outside it is human ground truth: never edit it
+unprompted, and where the human text conflicts with the signals, the human
+text wins (note the tension to the user instead).
+
+Rules for regeneration, derived from the implicit-feedback literature:
+
+- Evidence hierarchy (strong → weak): Disliked vote > Keeper vote > save >
+  cross-session repeats/restarts > completions > early skips > mid skips >
+  ignored. Explicit always beats implicit.
+- Skips correlate with engagement (people skip most inside catalogs they love)
+  — NEVER demote an artist on a single skip. get_taste_deltas already applies
+  the corroboration thresholds; trust its `trend` field and cite the evidence
+  counts when you write a tier change.
+- Write the block as short tier movements with one-line evidence, e.g.
+  "Bay Ledges → rising (3 saves, 1 keeper, 4 completions since W30)". No
+  prose padding.
+- Implicit evidence decays (180-day half-life), so old habits fade from the
+  block naturally; do not resurrect them without fresh signal.
 - **User edits are ground truth.** If the user edits the profile, that wins over
   anything inferred from data. You may propose regenerations; the user's file is
   authoritative.

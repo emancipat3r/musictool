@@ -76,8 +76,12 @@ func cmdServe(ctx context.Context, args []string) error {
 		servers = append(servers, srv)
 		go serveHTTP(srv, "mcp", *mcpAddr+"/mcp", "", "")
 	}
+	// Listen telemetry: read-only currently-playing polling for skip and
+	// repeat detection. Backs off gracefully if the token lacks the scope.
+	go svc.StartListenPoller(ctx, 20*time.Second)
+
 	if !*noDash {
-		d := dashboard.New(svc.DB, cfg)
+		d := dashboard.New(svc, cfg)
 		srv := &http.Server{Addr: *dashAddr, Handler: d.Handler(), ReadHeaderTimeout: 10 * time.Second}
 		servers = append(servers, srv)
 		go serveHTTP(srv, "dashboard", *dashAddr, *tlsCert, *tlsKey)

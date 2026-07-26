@@ -12,7 +12,11 @@ Determine the ISO week number first (`date +%V`); call it W##.
 1. Load context.
    - Read the taste profile from the shared volume (/data/taste-profile.md).
    - Call `mcp__spotify__get_recent_signals` to see what stuck since the last
-     batch (new saves, repeats, new Keepers votes) and what was ignored.
+     batch (new saves, repeats, Keepers/Disliked votes, early skips) and what
+     was ignored.
+   - Call `mcp__spotify__get_taste_deltas` and regenerate the profile's
+     `<!-- signals:auto -->` block per the CLAUDE.md rules (trust the trend
+     field; cite evidence counts; never touch text outside the block).
    - Call `mcp__spotify__get_library_stats` for overall shape.
 
 2. Research in-lane novelty.

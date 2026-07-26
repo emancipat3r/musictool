@@ -323,6 +323,53 @@ func (s *Service) DeletePlaylist(ctx context.Context, playlistRef string) (map[s
 	return map[string]any{"deleted": pl.Name, "playlist_id": pl.ID}, nil
 }
 
+// Vote records an explicit vote from the dashboard. The canonical write is to
+// the real Keepers/Disliked playlist (Spotify stays the source of truth and
+// the hourly sync reconciles); the local snapshot updates immediately so the
+// UI reflects the vote. Voting one way removes the opposite vote.
+func (s *Service) Vote(ctx context.Context, uri, action string) (map[string]any, error) {
+	if action != "keeper" && action != "dislike" {
+		return nil, fmt.Errorf("action must be keeper or dislike")
+	}
+	trackID := strings.TrimPrefix(uri, "spotify:track:")
+	if trackID == uri || trackID == "" {
+		return nil, fmt.Errorf("uri must be a spotify:track: URI")
+	}
+	target, opposite := KeepersPlaylistName, DislikedPlaylistName
+	if action == "dislike" {
+		target, opposite = DislikedPlaylistName, KeepersPlaylistName
+	}
+	pl, err := s.findPlaylist(ctx, target)
+	if err != nil {
+		return nil, fmt.Errorf("vote needs a playlist named %q that you own: %w", target, err)
+	}
+	// Best-effort removal from the opposite channel.
+	if op, err := s.findPlaylist(ctx, opposite); err == nil {
+		_ = s.SP.RemoveTracks(ctx, op.ID, []string{uri})
+	}
+	// Add if absent (duplicate votes are no-ops).
+	existing, err := s.SP.ReadbackURIs(ctx, pl.ID)
+	if err != nil {
+		return nil, err
+	}
+	present := false
+	for _, u := range existing {
+		if u == uri {
+			present = true
+			break
+		}
+	}
+	if !present {
+		if err := s.SP.AddTracks(ctx, pl.ID, []string{uri}); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.DB.SetLocalVote(ctx, action, trackID); err != nil {
+		return nil, err
+	}
+	return map[string]any{"ok": true, "action": action, "playlist": pl.Name}, nil
+}
+
 // findPlaylist resolves an id or exact (case-insensitive) name against the
 // live playlist list, so just-created playlists work without waiting for a
 // sync. Safety rails (most of the library is followed playlists owned by

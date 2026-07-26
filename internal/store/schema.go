@@ -115,6 +115,22 @@ CREATE TABLE IF NOT EXISTS disliked (
     first_seen TEXT
 );
 
+-- Listen telemetry from the currently-playing poller: one row per listen with
+-- how far the user got and the classified outcome (completed / skip_early /
+-- skip_mid / partial / restart). Richer than recently_played, which only logs
+-- completions.
+CREATE TABLE IF NOT EXISTS listen_events (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    track_id        TEXT NOT NULL,
+    started_at      TEXT,
+    ended_at        TEXT,
+    max_progress_ms INTEGER,
+    duration_ms     INTEGER,
+    outcome         TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_listen_track ON listen_events(track_id);
+CREATE INDEX IF NOT EXISTS idx_listen_ended ON listen_events(ended_at);
+
 -- Bookkeeping (last sync time, last batch time, etc.).
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,

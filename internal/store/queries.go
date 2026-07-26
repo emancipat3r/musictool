@@ -54,6 +54,7 @@ type RecentSignals struct {
 	Repeats              []RepeatRef `json:"repeats"`
 	NewKeepers           []TrackRef  `json:"new_keepers"`
 	NewDislikes          []TrackRef  `json:"new_dislikes"`
+	NewSkips             []TrackRef  `json:"new_skips"`
 	IgnoredFromLastBatch []TrackRef  `json:"ignored_from_last_batch"`
 	Summary              string      `json:"summary"`
 }
@@ -119,6 +120,7 @@ func (s *Store) Signals(ctx context.Context) (RecentSignals, error) {
 		Repeats:              []RepeatRef{},
 		NewKeepers:           []TrackRef{},
 		NewDislikes:          []TrackRef{},
+		NewSkips:             []TrackRef{},
 		IgnoredFromLastBatch: []TrackRef{},
 	}
 
@@ -164,6 +166,12 @@ func (s *Store) Signals(ctx context.Context) (RecentSignals, error) {
 		 WHERE d.first_seen > ? ORDER BY d.first_seen DESC LIMIT 50`, since)
 	if err == nil {
 		sig.NewDislikes = dislikes
+	}
+
+	// Early skips from listen telemetry (weak individually; corroboration
+	// thresholds live in the affinity model).
+	if skips, err := s.RecentSkips(ctx, since); err == nil {
+		sig.NewSkips = skips
 	}
 
 	// Ignored: tracks from the last batch playlist with zero plays since it
@@ -433,11 +441,35 @@ func (s *Store) TopArtistCards(ctx context.Context, limit int) ([]ArtistCard, er
 	return out, rows.Err()
 }
 
-// CoverRef is a dashboard tile: a track with its album art.
+// CoverRef is a dashboard tile: a track with its album art and vote state.
 type CoverRef struct {
+	URI      string `json:"uri"`
 	Title    string `json:"title"`
 	Artist   string `json:"artist"`
 	ImageURL string `json:"image_url,omitempty"`
+	Keeper   bool   `json:"keeper"`
+	Disliked bool   `json:"disliked"`
+}
+
+const coverSelect = `SELECT t.uri, t.title, t.primary_artist, COALESCE(al.image_url,''),
+	EXISTS(SELECT 1 FROM keepers k WHERE k.track_id=t.id),
+	EXISTS(SELECT 1 FROM disliked d WHERE d.track_id=t.id)`
+
+func (s *Store) queryCovers(ctx context.Context, q string, args ...any) ([]CoverRef, error) {
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]CoverRef, 0, 18)
+	for rows.Next() {
+		var c CoverRef
+		if err := rows.Scan(&c.URI, &c.Title, &c.Artist, &c.ImageURL, &c.Keeper, &c.Disliked); err != nil {
+			return out, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 // RecentSaveCovers returns the latest liked songs with album art for the
@@ -446,25 +478,29 @@ func (s *Store) RecentSaveCovers(ctx context.Context, limit int) ([]CoverRef, er
 	if limit <= 0 {
 		limit = 18
 	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT t.title, t.primary_artist, COALESCE(al.image_url,'')
+	return s.queryCovers(ctx, coverSelect+`
 		 FROM saved_tracks s
 		 JOIN tracks t ON t.id = s.track_id
 		 LEFT JOIN albums al ON al.id = t.album_id
 		 ORDER BY s.saved_at DESC LIMIT ?`, limit)
+}
+
+// LatestBatchCovers returns the most recent discovery batch's tracks with art
+// and vote state, so the dashboard can collect verdicts on the batch.
+func (s *Store) LatestBatchCovers(ctx context.Context) (string, []CoverRef, error) {
+	var label, playlistID string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(label,''), COALESCE(playlist_id,'') FROM batches ORDER BY id DESC LIMIT 1`).
+		Scan(&label, &playlistID)
 	if err != nil {
-		return nil, err
+		return "", nil, nil // no batches yet
 	}
-	defer rows.Close()
-	out := make([]CoverRef, 0, limit)
-	for rows.Next() {
-		var c CoverRef
-		if err := rows.Scan(&c.Title, &c.Artist, &c.ImageURL); err != nil {
-			return out, err
-		}
-		out = append(out, c)
-	}
-	return out, rows.Err()
+	covers, err := s.queryCovers(ctx, coverSelect+`
+		 FROM playlist_tracks pt
+		 JOIN tracks t ON t.id = pt.track_id
+		 LEFT JOIN albums al ON al.id = t.album_id
+		 WHERE pt.playlist_id = ? ORDER BY pt.position`, playlistID)
+	return label, covers, err
 }
 
 // PlayHistoryDaily returns per-day play counts for the last n days (dashboard).
@@ -491,6 +527,6 @@ func (s *Store) PlayHistoryDaily(ctx context.Context, days int) ([]Count, error)
 }
 
 func summarize(sig RecentSignals) string {
-	return fmt.Sprintf("since %s: %d new saves, %d repeats, %d new keepers, %d new dislikes, %d ignored from last batch",
-		sig.Since, len(sig.NewSaves), len(sig.Repeats), len(sig.NewKeepers), len(sig.NewDislikes), len(sig.IgnoredFromLastBatch))
+	return fmt.Sprintf("since %s: %d new saves, %d repeats, %d new keepers, %d new dislikes, %d early skips, %d ignored from last batch",
+		sig.Since, len(sig.NewSaves), len(sig.Repeats), len(sig.NewKeepers), len(sig.NewDislikes), len(sig.NewSkips), len(sig.IgnoredFromLastBatch))
 }

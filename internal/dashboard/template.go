@@ -113,6 +113,13 @@ const pageTemplate = `<!doctype html>
   .cover .t { font-size: .72rem; color: var(--fg); margin-top: .35rem; white-space: nowrap;
               overflow: hidden; text-overflow: ellipsis; }
   .cover .a { font-size: .68rem; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .votes { display: flex; gap: .35rem; margin-top: .3rem; }
+  .vote { flex: 1; padding: .18rem 0; border-radius: 7px; border: 1px solid var(--bg2);
+          background: var(--bg1); color: var(--fg-dim); font-size: .78rem; cursor: pointer;
+          margin: 0; transition: all .12s ease; }
+  .vote:hover { color: var(--fg); transform: none; }
+  .vote.on-keep { background: var(--green); color: var(--accent-fg); border-color: transparent; }
+  .vote.on-nope { background: var(--red); color: #fff; border-color: transparent; }
 
   .artists { display: flex; flex-direction: column; gap: .45rem; }
   .artist-row { display: flex; align-items: center; gap: .8rem; background: var(--bg1);
@@ -210,14 +217,36 @@ const pageTemplate = `<!doctype html>
     <span class="pill">{{.Stats.RecentAdds30d}} saves / 30d</span>
   </p>
 
-  {{if .RecentSaves}}
+  {{if .BatchCovers}}
   <section>
-    <h2>recently liked</h2>
+    <h2>latest batch {{if .BatchLabel}}<span class="muted sub">{{.BatchLabel}} · tap to vote: ✓ keeper, ✗ dislike</span>{{end}}</h2>
     <div class="covers">
-      {{range .RecentSaves}}
-        <div class="cover">
+      {{range .BatchCovers}}
+        <div class="cover" data-uri="{{.URI}}">
           {{if .ImageURL}}<img src="{{.ImageURL}}" alt="" loading="lazy">{{else}}<div class="ph">♪</div>{{end}}
           <div class="t">{{.Title}}</div><div class="a">{{.Artist}}</div>
+          <div class="votes">
+            <button class="vote keep {{if .Keeper}}on-keep{{end}}" title="Keeper">✓</button>
+            <button class="vote nope {{if .Disliked}}on-nope{{end}}" title="Dislike">✗</button>
+          </div>
+        </div>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+
+  {{if .RecentSaves}}
+  <section>
+    <h2>recently liked <span class="muted sub">tap to vote</span></h2>
+    <div class="covers">
+      {{range .RecentSaves}}
+        <div class="cover" data-uri="{{.URI}}">
+          {{if .ImageURL}}<img src="{{.ImageURL}}" alt="" loading="lazy">{{else}}<div class="ph">♪</div>{{end}}
+          <div class="t">{{.Title}}</div><div class="a">{{.Artist}}</div>
+          <div class="votes">
+            <button class="vote keep {{if .Keeper}}on-keep{{end}}" title="Keeper">✓</button>
+            <button class="vote nope {{if .Disliked}}on-nope{{end}}" title="Dislike">✗</button>
+          </div>
         </div>
       {{end}}
     </div>
@@ -282,11 +311,32 @@ const pageTemplate = `<!doctype html>
 <script>
   (function () {
     var sel = document.getElementById('theme');
-    if (!sel) return;
-    try { sel.value = localStorage.getItem('spotifytool-theme') || 'gruvbox-coyote'; } catch (e) {}
-    sel.addEventListener('change', function () {
-      document.documentElement.dataset.theme = sel.value;
-      try { localStorage.setItem('spotifytool-theme', sel.value); } catch (e) {}
+    if (sel) {
+      try { sel.value = localStorage.getItem('spotifytool-theme') || 'gruvbox-coyote'; } catch (e) {}
+      sel.addEventListener('change', function () {
+        document.documentElement.dataset.theme = sel.value;
+        try { localStorage.setItem('spotifytool-theme', sel.value); } catch (e) {}
+      });
+    }
+    // Voting: canonical write goes to the real Keepers/Disliked playlists.
+    document.addEventListener('click', function (ev) {
+      var btn = ev.target.closest('.vote');
+      if (!btn) return;
+      var tile = btn.closest('.cover');
+      if (!tile || !tile.dataset.uri) return;
+      var action = btn.classList.contains('keep') ? 'keeper' : 'dislike';
+      btn.disabled = true;
+      fetch('/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uri: tile.dataset.uri, action: action })
+      }).then(function (r) { return r.json(); }).then(function (res) {
+        btn.disabled = false;
+        if (!res.ok) { alert(res.error || 'vote failed'); return; }
+        var keep = tile.querySelector('.vote.keep'), nope = tile.querySelector('.vote.nope');
+        keep.classList.toggle('on-keep', action === 'keeper');
+        nope.classList.toggle('on-nope', action === 'dislike');
+      }).catch(function () { btn.disabled = false; alert('vote failed'); });
     });
   })();
 </script>

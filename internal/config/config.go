@@ -39,6 +39,9 @@ var Scopes = []string{
 	"playlist-modify-public",
 	"user-read-recently-played",
 	"user-top-read",
+	// Listen telemetry: read-only "what's playing now" polling for skip /
+	// completion / repeat detection. Still no playback control.
+	"user-read-currently-playing",
 }
 
 // Config is the resolved runtime configuration. Secrets (client id, refresh
