@@ -59,6 +59,7 @@ public class MainActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
 
     private WebView web;
+    private androidx.swiperefreshlayout.widget.SwipeRefreshLayout swipe;
     private LinearLayout gate;
     private TextView gateStatus;
     private ConnectivityManager.NetworkCallback netCallback;
@@ -110,6 +111,11 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onPageFinished(WebView v, String url) {
+                if (swipe != null) swipe.setRefreshing(false);
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req) {
                 // Keep dashboard + terminal in-app; hand anything else
                 // (open.spotify.com links etc.) to the system.
@@ -124,11 +130,19 @@ public class MainActivity extends Activity {
 
         gate = buildGate();
 
+        // Pull-to-refresh around the WebView: only triggers when the page is
+        // scrolled to the top (SwipeRefreshLayout checks child scrollability).
+        swipe = new androidx.swiperefreshlayout.widget.SwipeRefreshLayout(this);
+        swipe.addView(web);
+        swipe.setColorSchemeColors(COL_ACCENT);
+        swipe.setProgressBackgroundColorSchemeColor(COL_BG1);
+        swipe.setOnRefreshListener(() -> web.reload());
+
         root.addView(gate, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT));
-        root.addView(web, new LinearLayout.LayoutParams(
+        root.addView(swipe, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT));
-        web.setVisibility(View.GONE);
+        swipe.setVisibility(View.GONE);
         setContentView(root);
     }
 
@@ -297,13 +311,13 @@ public class MainActivity extends Activity {
             main.post(() -> {
                 if (reachable) {
                     gate.setVisibility(View.GONE);
-                    web.setVisibility(View.VISIBLE);
+                    swipe.setVisibility(View.VISIBLE);
                     if (!webLoaded) {
                         web.loadUrl(dashUrl());
                         webLoaded = true;
                     }
                 } else {
-                    web.setVisibility(View.GONE);
+                    swipe.setVisibility(View.GONE);
                     gate.setVisibility(View.VISIBLE);
                     setStatus(vpn
                             ? "Tailscale looks active, but the dashboard is not answering. Is the homelab up?"
@@ -376,7 +390,7 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (web.getVisibility() == View.VISIBLE && web.canGoBack()) web.goBack();
+        if (swipe.getVisibility() == View.VISIBLE && web.canGoBack()) web.goBack();
         else super.onBackPressed();
     }
 
