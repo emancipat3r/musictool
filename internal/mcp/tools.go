@@ -86,22 +86,53 @@ func Tools(svc *service.Service) []Tool {
 		},
 		{
 			Name:        "get_playlists",
-			Description: "List playlists (compact metadata) from the local store.",
-			InputSchema: obj(nil),
-			Handler: func(ctx context.Context, _ json.RawMessage) (any, error) {
-				return svc.DB.Playlists(ctx)
+			Description: "List playlists (compact metadata) from the local store. Defaults to playlists the user OWNS; set owned_only=false to include followed playlists. Descriptions are truncated.",
+			InputSchema: obj(map[string]any{
+				"owned_only": boolProp("only playlists owned by the user (default true)"),
+				"limit":      intProp("max rows (default 50)"),
+			}),
+			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
+				a := struct {
+					OwnedOnly *bool `json:"owned_only"`
+					Limit     int   `json:"limit"`
+				}{}
+				_ = json.Unmarshal(args, &a)
+				ownedOnly := a.OwnedOnly == nil || *a.OwnedOnly
+				limit := a.Limit
+				if limit <= 0 || limit > 200 {
+					limit = 50
+				}
+				pls, err := svc.DB.Playlists(ctx)
+				if err != nil {
+					return nil, err
+				}
+				userID, _ := svc.DB.GetMeta(ctx, "user_id")
+				out := pls[:0:0]
+				for _, p := range pls {
+					if ownedOnly && userID != "" && p.OwnerID != userID {
+						continue
+					}
+					if len(p.Description) > 100 {
+						p.Description = p.Description[:100] + "…"
+					}
+					out = append(out, p)
+					if len(out) >= limit {
+						break
+					}
+				}
+				return out, nil
 			},
 		},
 		{
 			Name:        "read_playlist",
-			Description: "Read a playlist's tracks (compact) by id or exact name.",
+			Description: "Read a playlist's tracks LIVE from Spotify, by id or exact name (name matching is scoped to playlists the user owns). An unknown playlist is an error; an empty playlist returns an empty list — never null.",
 			InputSchema: obj(map[string]any{"playlist": strProp("playlist id or exact name")}, "playlist"),
 			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
 				var a struct{ Playlist string `json:"playlist"` }
 				if err := json.Unmarshal(args, &a); err != nil || a.Playlist == "" {
 					return nil, errors.New("playlist id or name is required")
 				}
-				return svc.DB.PlaylistTracks(ctx, a.Playlist)
+				return svc.ReadPlaylist(ctx, a.Playlist)
 			},
 		},
 		{

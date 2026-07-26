@@ -221,29 +221,40 @@ func (s *Store) AppendPlays(ctx context.Context, plays []model.PlayEvent) (int, 
 
 // --- resolve.Cache implementation ---
 
+// cacheEntry is the persisted payload of a resolution: the full chosen track
+// plus the score it earned, so replays are verifiable and explainable.
+type cacheEntry struct {
+	Track model.Track `json:"track"`
+	Score int         `json:"score"`
+}
+
 // GetResolution returns the cached chosen track (full metadata when stored,
-// URI-only for legacy rows) and its original bucket for a resolver key.
-func (s *Store) GetResolution(ctx context.Context, key string) (model.Track, string, bool) {
+// URI-only for legacy rows — the resolver treats those as misses), the
+// original bucket, and the stored score.
+func (s *Store) GetResolution(ctx context.Context, key string) (model.Track, string, int, bool) {
 	var uri string
 	var bucket, trackJSON sql.NullString
 	err := s.db.QueryRowContext(ctx,
 		`SELECT uri, bucket, track_json FROM resolution_cache WHERE query_key=?`, key).
 		Scan(&uri, &bucket, &trackJSON)
 	if err != nil {
-		return model.Track{}, "", false
+		return model.Track{}, "", 0, false
 	}
-	t := model.Track{URI: uri}
+	var e cacheEntry
 	if trackJSON.String != "" {
-		_ = json.Unmarshal([]byte(trackJSON.String), &t)
-		t.URI = uri // uri column stays authoritative
+		if err := json.Unmarshal([]byte(trackJSON.String), &e); err != nil || e.Track.URI == "" {
+			// Legacy format: a bare track object.
+			_ = json.Unmarshal([]byte(trackJSON.String), &e.Track)
+		}
 	}
-	return t, bucket.String, true
+	e.Track.URI = uri // uri column stays authoritative
+	return e.Track, bucket.String, e.Score, true
 }
 
-// PutResolution stores a resolver decision with the full chosen track, so
-// cache replays carry title/artist/album instead of a hollow URI.
-func (s *Store) PutResolution(ctx context.Context, key string, track model.Track, bucket string) error {
-	tj, _ := json.Marshal(track)
+// PutResolution stores a resolver decision with the full chosen track and its
+// score, so cache replays carry title/artist/album instead of a hollow URI.
+func (s *Store) PutResolution(ctx context.Context, key string, track model.Track, bucket string, score int) error {
+	tj, _ := json.Marshal(cacheEntry{Track: track, Score: score})
 	_, err := s.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO resolution_cache(query_key,uri,bucket,track_json,created_at) VALUES(?,?,?,?,?)`,
 		key, track.URI, bucket, string(tj), nowRFC3339())

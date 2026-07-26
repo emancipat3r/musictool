@@ -7,3 +7,7 @@
 # the interactive session (container 1), billed to the Max subscription: run
 # /discovery-batch there for the weekly batch.
 0 * * * * spotifytool sync >/dev/null 2>>/data/sync.log
+
+# Daily deep sync (04:30): refreshes every owned playlist's track membership.
+# Unreadable playlists are logged and skipped, never fatal.
+30 4 * * * spotifytool sync --full >/dev/null 2>>/data/sync.log

@@ -238,7 +238,7 @@ func cmdBuild(ctx context.Context, args []string) error {
 	// ambiguous picks awaiting a caller decision.
 	if res != nil {
 		switch {
-		case !res.ReadbackMatches:
+		case res.ReadbackMatches != nil && !*res.ReadbackMatches:
 			return apperr.Partial(fmt.Errorf("read-back did not match resolved URIs"))
 		case len(res.NotFound) > 0 || len(res.Ambiguous) > 0:
 			return apperr.Partial(fmt.Errorf("%d of %d picks did not land (%d not found, %d ambiguous)",

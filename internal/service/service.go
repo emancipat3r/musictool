@@ -59,12 +59,22 @@ func (s *Service) Close() error {
 	return nil
 }
 
+// SkippedPlaylist records a playlist the deep sync could not read.
+type SkippedPlaylist struct {
+	Name   string `json:"name"`
+	ID     string `json:"id"`
+	Reason string `json:"reason"`
+}
+
 // SyncResult summarizes a sync run.
 type SyncResult struct {
-	SavedTracks int `json:"saved_tracks"`
-	Playlists   int `json:"playlists"`
-	NewPlays    int `json:"new_plays"`
-	Keepers     int `json:"keepers"`
+	SavedTracks    int               `json:"saved_tracks"`
+	Playlists      int               `json:"playlists"`
+	NewPlays       int               `json:"new_plays"`
+	Keepers        int               `json:"keepers"`
+	PlaylistsDeep  int               `json:"playlists_deep_synced"`
+	Skipped        []SkippedPlaylist `json:"skipped,omitempty"`
+	NonOwnedSkipped int              `json:"non_owned_skipped,omitempty"`
 }
 
 // Sync refreshes liked songs, playlist metadata, recently-played history
@@ -117,30 +127,59 @@ func (s *Service) Sync(ctx context.Context, full bool) (SyncResult, error) {
 	}
 	res.NewPlays = added
 
+	// Record the current user id so name-scoped operations and owned-only
+	// filtering work. Non-fatal on failure.
+	var userID string
+	if user, err := s.SP.CurrentUser(ctx); err == nil {
+		userID = user.ID
+		_ = s.DB.SetMeta(ctx, "user_id", userID)
+	} else {
+		logx.Errorf("sync: could not fetch current user: %v", err)
+	}
+
 	// Keepers + batch playlists always get full track membership so votes and
 	// ignored-track detection work; other playlists only when full is set.
+	//
+	// Per-playlist error isolation: a 403 on one playlist (typically a
+	// followed playlist owned by someone else) is logged and skipped, never
+	// fatal to the sweep. The deep sweep also skips non-owned playlists by
+	// default — they are the usual 403 source and are not curation targets.
+	logx.Infof("sync: playlist tracks (full=%v)…", full)
 	batchPlaylistIDs := s.batchPlaylistIDs(ctx)
 	for _, p := range pls {
 		isKeepers := strings.EqualFold(p.Name, KeepersPlaylistName)
-		if full || isKeepers || batchPlaylistIDs[p.ID] {
-			tracks, err := s.SP.PlaylistTracks(ctx, p.ID)
-			if err != nil {
-				return fail(err)
-			}
-			if err := s.DB.ReplacePlaylistTracks(ctx, p.ID, tracks); err != nil {
-				return fail(err)
-			}
-			if isKeepers {
-				ids := make([]string, 0, len(tracks))
-				for _, t := range tracks {
-					ids = append(ids, t.ID)
-				}
-				if err := s.DB.SyncKeepers(ctx, ids); err != nil {
-					return fail(err)
-				}
-				res.Keepers = len(ids)
-			}
+		mustHave := isKeepers || batchPlaylistIDs[p.ID]
+		if !full && !mustHave {
+			continue
 		}
+		if full && !mustHave && userID != "" && p.OwnerID != userID {
+			res.NonOwnedSkipped++
+			continue
+		}
+		tracks, err := s.SP.PlaylistTracks(ctx, p.ID)
+		if err != nil {
+			logx.Errorf("sync: skipping playlist %q (%s): %v", p.Name, p.ID, err)
+			res.Skipped = append(res.Skipped, SkippedPlaylist{Name: p.Name, ID: p.ID, Reason: err.Error()})
+			continue
+		}
+		if err := s.DB.ReplacePlaylistTracks(ctx, p.ID, tracks); err != nil {
+			return fail(err)
+		}
+		res.PlaylistsDeep++
+		if isKeepers {
+			ids := make([]string, 0, len(tracks))
+			for _, t := range tracks {
+				ids = append(ids, t.ID)
+			}
+			if err := s.DB.SyncKeepers(ctx, ids); err != nil {
+				return fail(err)
+			}
+			res.Keepers = len(ids)
+			logx.Infof("sync: keepers membership: %d", len(ids))
+		}
+	}
+	if len(res.Skipped) > 0 {
+		logx.Infof("sync: done with %d playlist(s) skipped (see errors above)", len(res.Skipped))
 	}
 	return res, nil
 }

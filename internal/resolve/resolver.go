@@ -2,6 +2,7 @@ package resolve
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -43,11 +44,11 @@ type Searcher interface {
 }
 
 // Cache stores prior resolutions so identical inputs are free and stable. The
-// full chosen track and the bucket are cached so a hit replays with metadata
-// (not a hollow URI) and a probable never resurfaces as a false exact.
+// full chosen track, the bucket, and the score are cached so a hit replays
+// with verifiable metadata and a probable never resurfaces as a false exact.
 type Cache interface {
-	GetResolution(ctx context.Context, key string) (track model.Track, bucket string, ok bool)
-	PutResolution(ctx context.Context, key string, track model.Track, bucket string) error
+	GetResolution(ctx context.Context, key string) (track model.Track, bucket string, score int, ok bool)
+	PutResolution(ctx context.Context, key string, track model.Track, bucket string, score int) error
 }
 
 // Resolver turns curated picks into exact URIs.
@@ -61,21 +62,34 @@ func New(search Searcher, cache Cache) *Resolver {
 	return &Resolver{search: search, cache: cache}
 }
 
-// cacheKey is the stable key for a query: normalized artist|title|album.
+// cacheEpoch versions the cache key space. Bump it whenever scoring changes so
+// entries decided under old rules (e.g. the pre-album-aware scoring that could
+// cache a soundtrack cut as exact) are orphaned instead of replayed forever.
+const cacheEpoch = "v2"
+
+// cacheKey is the stable key for a query: epoch|normalized artist|title|album.
 func cacheKey(q model.TrackQuery) string {
-	return NormalizeArtist(q.Artist) + "\x1f" + NormalizeTitle(q.Title) + "\x1f" + NormalizeTitle(q.Album)
+	return cacheEpoch + "\x1f" + NormalizeArtist(q.Artist) + "\x1f" + NormalizeTitle(q.Title) + "\x1f" + NormalizeTitle(q.Album)
 }
 
 // Resolve resolves a single pick, consulting the cache first.
 func (r *Resolver) Resolve(ctx context.Context, q model.TrackQuery) (Resolution, error) {
+	// Per-pick validation: one malformed pick must cost that row, not the
+	// batch (live regression: an empty pick 400'd all five).
+	if strings.TrimSpace(q.Title) == "" || strings.TrimSpace(q.Artist) == "" {
+		return Resolution{Query: q, Bucket: NotFound, Note: "invalid pick: artist and title are required"}, nil
+	}
+
 	key := cacheKey(q)
 	if r.cache != nil {
-		if track, bucket, ok := r.cache.GetResolution(ctx, key); ok {
+		if track, bucket, score, ok := r.cache.GetResolution(ctx, key); ok {
 			b := Bucket(bucket)
-			if b != Exact && b != Probable {
-				b = Exact // legacy rows cached before buckets were stored
+			// A cached bucket the current code doesn't recognize, or a hollow
+			// track (no metadata), is a MISS: re-resolve rather than
+			// manufacture confidence or return an unverifiable URI.
+			if (b == Exact || b == Probable) && track.Title != "" {
+				return Resolution{Query: q, Bucket: b, Chosen: &track, Score: score, Note: "from cache"}, nil
 			}
-			return Resolution{Query: q, Bucket: b, Chosen: &track, Note: "from cache"}, nil
 		}
 	}
 
@@ -95,7 +109,7 @@ func (r *Resolver) Resolve(ctx context.Context, q model.TrackQuery) (Resolution,
 
 	res := Score(q, cands)
 	if r.cache != nil && (res.Bucket == Exact || res.Bucket == Probable) && res.Chosen != nil {
-		_ = r.cache.PutResolution(ctx, key, *res.Chosen, string(res.Bucket))
+		_ = r.cache.PutResolution(ctx, key, *res.Chosen, string(res.Bucket), res.Score)
 	}
 	return res, nil
 }
@@ -119,7 +133,7 @@ func Score(q model.TrackQuery, cands []model.Track) Resolution {
 	nqTitle := NormalizeTitle(q.Title)
 	nqArtist := NormalizeArtist(q.Artist)
 	nqAlbum := NormalizeTitle(q.Album)
-	nqVerbatim := NormalizeVerbatim(q.Title)
+	nqVerbatim := VerbatimKey(q.Title)
 
 	scoredCands := make([]scored, 0, len(cands))
 	for _, c := range cands {
@@ -137,15 +151,22 @@ func Score(q model.TrackQuery, cands []model.Track) Resolution {
 			s += 45
 		}
 		// Verbatim bonus: the candidate's raw title matches the query with no
-		// tag-stripping needed ("Time Bomb" beats "Time Bomb - Live", which
-		// only matches after normalization).
-		if titleExact && NormalizeVerbatim(c.Title) == nqVerbatim {
+		// tag-stripping needed ("Time Bomb" beats "Time Bomb - Live"). Remaster
+		// tags are exempt via VerbatimKey, so "X - Remastered" competes on
+		// equal footing with untagged soundtrack/compilation cuts.
+		if titleExact && VerbatimKey(c.Title) == nqVerbatim {
 			s += 25
 		}
 		// Variant penalty: candidate carries a performance-variant marker
 		// (live/acoustic/instrumental/…) the query did not ask for.
 		if HasUnwantedVariant(q.Title, c.Title) {
 			s -= 15
+		}
+		// Album penalty: soundtrack/hits/karaoke releases are almost never the
+		// canonical home of the pick. Skipped when the caller pinned exactly
+		// this album (then it is, by definition, what they want).
+		if AlbumNonCanonical(c.Album.Name) && (nqAlbum == "" || NormalizeTitle(c.Album.Name) != nqAlbum) {
+			s -= 12
 		}
 		switch {
 		case artistExact:
@@ -217,11 +238,23 @@ func classify(q model.TrackQuery, ranked []scored) Resolution {
 			if group, isrc := dominantISRCGroup(tied); group != nil {
 				// One recording, many releases (singles, compilations,
 				// deluxe editions; stray clean edits carry their own ISRC and
-				// are outvoted). Prefer the earliest release, then URI.
-				chosen := earliestRelease(group)
+				// are outvoted). Prefer the canonical representative.
+				chosen := chooseRepresentative(group)
 				res.Bucket = Exact
 				res.Chosen = &chosen
-				res.Note = "same recording across releases (ISRC " + isrc + "); chose earliest"
+				res.Note = fmt.Sprintf("same recording across %d releases (ISRC %s); chose %q",
+					len(group), isrc, chosen.Album.Name)
+				return res
+			}
+			// Distinct ISRCs but the SAME album modulo edition tags means
+			// different masterings of one release ("Master of Puppets
+			// (Remastered)" vs "(Remastered Deluxe Box Set)") — collapse to
+			// the least-adorned edition rather than punting to the caller.
+			if group := sameAlbumGroup(tied); group != nil {
+				chosen := chooseRepresentative(group)
+				res.Bucket = Exact
+				res.Chosen = &chosen
+				res.Note = fmt.Sprintf("%d masterings of the same album; chose %q", len(group), chosen.Album.Name)
 				return res
 			}
 			res.Bucket = Ambiguous
@@ -334,20 +367,51 @@ func dominantISRCGroup(tracks []model.Track) ([]model.Track, string) {
 	return nil, ""
 }
 
-// earliestRelease picks the track with the earliest album release date
-// (lexicographic on ISO dates), breaking ties by URI for determinism.
-func earliestRelease(tracks []model.Track) model.Track {
+// sameAlbumGroup returns the tied candidates when they all belong to the same
+// album after edition-tag normalization, or nil.
+func sameAlbumGroup(tracks []model.Track) []model.Track {
+	base := NormalizeTitle(tracks[0].Album.Name)
+	if base == "" {
+		return nil
+	}
+	for _, t := range tracks[1:] {
+		if NormalizeTitle(t.Album.Name) != base {
+			return nil
+		}
+	}
+	return tracks
+}
+
+// chooseRepresentative picks the canonical release of a same-recording group:
+// least-adorned album title first (plain "Bleach" over "Bleach (Deluxe
+// Edition)"), then earliest release date, then URI for determinism.
+func chooseRepresentative(tracks []model.Track) model.Track {
 	best := tracks[0]
 	for _, t := range tracks[1:] {
-		bd, td := best.Album.ReleaseDate, t.Album.ReleaseDate
-		switch {
-		case td != "" && (bd == "" || td < bd):
-			best = t
-		case td == bd && t.URI < best.URI:
+		if repLess(t, best) {
 			best = t
 		}
 	}
 	return best
+}
+
+// repLess reports whether a is a more canonical representative than b.
+func repLess(a, b model.Track) bool {
+	aa, ab := EditionAdornment(a.Album.Name), EditionAdornment(b.Album.Name)
+	if aa != ab {
+		return aa < ab
+	}
+	ad, bd := a.Album.ReleaseDate, b.Album.ReleaseDate
+	if ad != bd {
+		if ad == "" {
+			return false
+		}
+		if bd == "" {
+			return true
+		}
+		return ad < bd
+	}
+	return a.URI < b.URI
 }
 
 // topTracks returns up to n candidates for an ambiguous result, deduped by

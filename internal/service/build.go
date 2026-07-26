@@ -24,8 +24,12 @@ type BuildResult struct {
 	NotFound        []model.TrackQuery   `json:"not_found"`
 	Ambiguous       []resolve.Resolution `json:"ambiguous"`
 	ReadbackURIs    []string             `json:"readback_uris"`
-	ReadbackMatches bool                 `json:"readback_matches"`
-	Note            string               `json:"note,omitempty"`
+	// ReadbackMatches is nil when no write happened (e.g. the name_exists
+	// no-op), so a benign refusal is never mistaken for a failed verification.
+	ReadbackMatches *bool  `json:"readback_matches,omitempty"`
+	Created         bool   `json:"created"`
+	Reason          string `json:"reason,omitempty"`
+	Note            string `json:"note,omitempty"`
 }
 
 // BuildOptions controls create_playlist_exact.
@@ -49,13 +53,20 @@ func (s *Service) BuildExact(ctx context.Context, opts BuildOptions) (*BuildResu
 	res := &BuildResult{Name: opts.Name, Requested: len(opts.Queries)}
 
 	// Idempotency guard: a same-named playlist already existing is far more
-	// often a repeated call than an intent to make twins.
+	// often a repeated call than an intent to make twins. The count is read
+	// live from the playlist itself (the summary field can lag).
 	if !opts.AllowDuplicate {
 		if existing, err := s.findPlaylist(ctx, opts.Name); err == nil {
+			liveCount := existing.TrackCount
+			if uris, err := s.SP.ReadbackURIs(ctx, existing.ID); err == nil {
+				liveCount = len(uris)
+			}
 			res.PlaylistID = existing.ID
 			res.PlaylistURI = "spotify:playlist:" + existing.ID
-			res.Note = fmt.Sprintf("a playlist named %q already exists (%d tracks); nothing was created. Use add_to_playlist_exact to extend it, or set allow_duplicate to force a twin.",
-				existing.Name, existing.TrackCount)
+			res.Created = false
+			res.Reason = "name_exists"
+			res.Note = fmt.Sprintf("a playlist named %q already exists (%d tracks); nothing was created. This is a no-op, not a failure. Use add_to_playlist_exact to extend it, or set allow_duplicate to force a twin.",
+				existing.Name, liveCount)
 			return res, nil
 		}
 	}
@@ -102,7 +113,8 @@ func (s *Service) BuildExact(ctx context.Context, opts BuildOptions) (*BuildResu
 	}
 	res.ReadbackURIs = readback
 	res.Added = len(readback)
-	res.ReadbackMatches = equalURIs(accepted, readback)
+	res.ReadbackMatches = boolPtr(equalURIs(accepted, readback))
+	res.Created = true
 
 	if opts.RecordBatchLabel != "" {
 		_ = s.DB.RecordBatch(ctx, store.Batch{
@@ -114,6 +126,8 @@ func (s *Service) BuildExact(ctx context.Context, opts BuildOptions) (*BuildResu
 	}
 	return res, nil
 }
+
+func boolPtr(b bool) *bool { return &b }
 
 // equalURIs reports whether two URI slices are identical in content and order.
 func equalURIs(a, b []string) bool {
@@ -182,7 +196,7 @@ func (s *Service) AppendExact(ctx context.Context, playlistRef string, queries [
 	res.ReadbackURIs = readback
 	res.Added = len(accepted)
 	// Verify: previous contents plus the accepted tail, in order.
-	res.ReadbackMatches = equalURIs(append(append([]string{}, existing...), accepted...), readback)
+	res.ReadbackMatches = boolPtr(equalURIs(append(append([]string{}, existing...), accepted...), readback))
 	return res, nil
 }
 
@@ -277,8 +291,15 @@ func (s *Service) DeletePlaylist(ctx context.Context, playlistRef string) (map[s
 
 // findPlaylist resolves an id or exact (case-insensitive) name against the
 // live playlist list, so just-created playlists work without waiting for a
-// sync.
+// sync. Safety rails (most of the library is followed playlists owned by
+// strangers): empty refs are refused, name matching is scoped to playlists
+// the user OWNS, and an ambiguous name errors instead of picking one.
+// Non-owned playlists are reachable by explicit id only.
 func (s *Service) findPlaylist(ctx context.Context, ref string) (model.Playlist, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return model.Playlist{}, fmt.Errorf("empty playlist reference refused")
+	}
 	pls, err := s.SP.Playlists(ctx)
 	if err != nil {
 		return model.Playlist{}, err
@@ -288,10 +309,55 @@ func (s *Service) findPlaylist(ctx context.Context, ref string) (model.Playlist,
 			return p, nil
 		}
 	}
+	userID := ""
+	if u, err := s.SP.CurrentUser(ctx); err == nil {
+		userID = u.ID
+	}
+	var matches []model.Playlist
 	for _, p := range pls {
-		if strings.EqualFold(p.Name, ref) {
-			return p, nil
+		if strings.EqualFold(p.Name, ref) && (userID == "" || p.OwnerID == userID) {
+			matches = append(matches, p)
 		}
 	}
-	return model.Playlist{}, fmt.Errorf("no playlist matches %q (by id or exact name)", ref)
+	switch len(matches) {
+	case 1:
+		return matches[0], nil
+	case 0:
+		return model.Playlist{}, fmt.Errorf("no playlist you own matches %q (name matching is owner-scoped; use an explicit id for followed playlists)", ref)
+	default:
+		ids := make([]string, 0, len(matches))
+		for _, m := range matches {
+			ids = append(ids, m.ID)
+		}
+		return model.Playlist{}, fmt.Errorf("%d playlists you own are named %q (%s); use an explicit id", len(matches), ref, strings.Join(ids, ", "))
+	}
+}
+
+// PlaylistContents is the live read of a playlist for read_playlist: the three
+// states are distinguishable — unknown playlist errors, an empty playlist
+// returns an empty (never null) track list, and tracks come back compact.
+type PlaylistContents struct {
+	PlaylistID string           `json:"playlist_id"`
+	Name       string           `json:"name"`
+	TrackCount int              `json:"track_count"`
+	Tracks     []store.TrackRef `json:"tracks"`
+}
+
+// ReadPlaylist fetches a playlist's contents LIVE from Spotify (the local
+// store is a cache for stats, not the source of truth for auditing).
+func (s *Service) ReadPlaylist(ctx context.Context, ref string) (*PlaylistContents, error) {
+	pl, err := s.findPlaylist(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	tracks, err := s.SP.PlaylistTracks(ctx, pl.ID)
+	if err != nil {
+		return nil, err
+	}
+	out := &PlaylistContents{PlaylistID: pl.ID, Name: pl.Name, Tracks: make([]store.TrackRef, 0, len(tracks))}
+	for _, t := range tracks {
+		out.Tracks = append(out.Tracks, store.TrackRef{ID: t.ID, URI: t.URI, Title: t.Title, Artist: t.ArtistName()})
+	}
+	out.TrackCount = len(out.Tracks)
+	return out, nil
 }

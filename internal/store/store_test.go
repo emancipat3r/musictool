@@ -67,7 +67,7 @@ func TestSchemaAndSavedRoundTrip(t *testing.T) {
 func TestResolutionCacheRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	s := openTemp(t)
-	if _, _, ok := s.GetResolution(ctx, "k"); ok {
+	if _, _, _, ok := s.GetResolution(ctx, "k"); ok {
 		t.Fatal("empty cache returned a hit")
 	}
 	stored := model.Track{
@@ -75,15 +75,18 @@ func TestResolutionCacheRoundTrip(t *testing.T) {
 		Artists: []model.Artist{{Name: "Sublime"}},
 		Album:   model.Album{Name: "Sublime"},
 	}
-	if err := s.PutResolution(ctx, "k", stored, "probable"); err != nil {
+	if err := s.PutResolution(ctx, "k", stored, "probable", 145); err != nil {
 		t.Fatal(err)
 	}
-	got, bucket, ok := s.GetResolution(ctx, "k")
+	got, bucket, score, ok := s.GetResolution(ctx, "k")
 	if !ok || got.URI != "spotify:track:x" {
 		t.Fatalf("cache miss after put: %+v %v", got, ok)
 	}
 	if bucket != "probable" {
 		t.Fatalf("bucket = %q, want probable (cache must not upgrade confidence)", bucket)
+	}
+	if score != 145 {
+		t.Fatalf("score = %d, want 145 (replays must be explainable)", score)
 	}
 	// Cache hits must carry metadata, not hollow URI-only tracks.
 	if got.Title != "Santeria" || got.ArtistName() != "Sublime" {

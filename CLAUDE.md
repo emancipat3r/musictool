@@ -64,7 +64,9 @@ connector.
    `delete_playlist`. Never rebuild from scratch for a fix-up.
 6. If `readback_matches` is false: report the exact diff (expected vs actual
    URIs) to the user and stop. Do not retry silently and do not "fix" it by
-   re-adding.
+   re-adding. A create returning `created: false` with `reason: "name_exists"`
+   is a benign idempotency no-op, not a verification failure — `readback_matches`
+   is absent in that case by design.
 
 ## Version policy
 

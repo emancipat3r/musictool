@@ -2,6 +2,7 @@ package resolve
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/emancipat3r/spotifytool/internal/model"
@@ -228,6 +229,120 @@ func TestScoreTwoCandidatesSameISRC(t *testing.T) {
 	}
 }
 
+// Live regression (stress test F3): the canonical catalog cut is titled
+// "X - Remastered" while the soundtrack carries the untagged title, so the
+// verbatim bonus rewarded the soundtrack. Remaster tags are version-neutral
+// and non-canonical albums are penalized; the 1986 album must win.
+func TestScoreCanonicalBeatsSoundtrack(t *testing.T) {
+	q := model.TrackQuery{Artist: "Metallica", Title: "Master of Puppets"}
+	canonical := trk("spotify:track:album", "Master of Puppets (Remastered)", "Metallica", 0)
+	canonical.Album = model.Album{Name: "Master of Puppets (Remastered)", ReleaseDate: "1986-03-03"}
+	soundtrack := trk("spotify:track:st", "Master of Puppets", "Metallica", 0)
+	soundtrack.Album = model.Album{Name: "Stranger Things: Soundtrack from the Netflix Series, Season 4", ReleaseDate: "2022-07-01"}
+	res := Score(q, []model.Track{soundtrack, canonical})
+	if res.Bucket != Exact {
+		t.Fatalf("bucket = %s (%s), want exact", res.Bucket, res.Note)
+	}
+	if res.Chosen.URI != "spotify:track:album" {
+		t.Fatalf("chose %s; the canonical album must beat the soundtrack", res.Chosen.URI)
+	}
+}
+
+// Stress test F6: one malformed pick costs that row, never the batch.
+func TestResolveListSurvivesInvalidPick(t *testing.T) {
+	s := stubSearcher{tracks: []model.Track{trk("spotify:track:ok", "Santeria", "Sublime", 0)}}
+	r := New(s, nil)
+	out, err := r.ResolveList(context.Background(), []model.TrackQuery{
+		{Artist: "Sublime", Title: "Santeria"},
+		{Artist: "", Title: ""},
+		{Artist: "Sublime", Title: "Santeria"},
+	})
+	if err != nil {
+		t.Fatalf("batch failed on invalid pick: %v", err)
+	}
+	if len(out) != 3 {
+		t.Fatalf("resolutions = %d, want 3", len(out))
+	}
+	if out[1].Bucket != NotFound || out[1].Note == "" {
+		t.Fatalf("invalid pick should be not_found with a note, got %+v", out[1])
+	}
+	if out[0].Bucket != Exact || out[2].Bucket != Exact {
+		t.Fatal("valid picks should still resolve")
+	}
+}
+
+// Stress test F4/F5: a hollow cached track or an unknown cached bucket is a
+// miss (re-resolve), never manufactured confidence.
+func TestCacheHollowAndUnknownBucketAreMisses(t *testing.T) {
+	s := stubSearcher{tracks: []model.Track{trk("spotify:track:fresh", "Santeria", "Sublime", 0)}}
+	q := model.TrackQuery{Artist: "Sublime", Title: "Santeria"}
+
+	hollow := &memCache{track: model.Track{URI: "spotify:track:stale"}, bucket: "exact"}
+	res, err := New(s, hollow).Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Note == "from cache" || res.Chosen.URI != "spotify:track:fresh" {
+		t.Fatalf("hollow cache row must be a miss, got %+v", res)
+	}
+
+	unknown := &memCache{track: trk("spotify:track:amb", "Santeria", "Sublime", 0), bucket: "ambiguous"}
+	res2, err := New(s, unknown).Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.Note == "from cache" {
+		t.Fatalf("unknown bucket must re-resolve, got %+v", res2)
+	}
+}
+
+// Stress test F8: among same-recording releases, the least-adorned album wins
+// over deluxe/anniversary editions even when their dates are close.
+func TestRepresentativePrefersPlainAlbum(t *testing.T) {
+	q := model.TrackQuery{Artist: "Nirvana", Title: "About a Girl"}
+	mk := func(uri, album, date string) model.Track {
+		tr := trk(uri, "About a Girl", "Nirvana", 0)
+		tr.ISRC = "USSUB0983403"
+		tr.Album = model.Album{Name: album, ReleaseDate: date}
+		return tr
+	}
+	res := Score(q, []model.Track{
+		mk("spotify:track:deluxe", "Bleach (Deluxe Edition)", "1989-06-01"),
+		mk("spotify:track:plain", "Bleach", "1989-06-15"),
+	})
+	if res.Bucket != Exact {
+		t.Fatalf("bucket = %s, want exact", res.Bucket)
+	}
+	if res.Chosen.URI != "spotify:track:plain" {
+		t.Fatalf("chose %s; plain album must beat deluxe", res.Chosen.URI)
+	}
+	if !strings.Contains(res.Note, "Bleach") {
+		t.Fatalf("note should name the chosen release: %q", res.Note)
+	}
+}
+
+// Live regression: with the album pinned, two masterings of the same album
+// (distinct ISRCs) must collapse to the least-adorned edition, not punt.
+func TestSameAlbumMasteringsCollapse(t *testing.T) {
+	q := model.TrackQuery{Artist: "Metallica", Title: "Master of Puppets", Album: "Master of Puppets"}
+	mk := func(uri, album, isrc string) model.Track {
+		tr := trk(uri, "Master of Puppets", "Metallica", 0)
+		tr.ISRC = isrc
+		tr.Album = model.Album{Name: album, ReleaseDate: "1986-03-03"}
+		return tr
+	}
+	res := Score(q, []model.Track{
+		mk("spotify:track:box", "Master of Puppets (Remastered Deluxe Box Set)", "QMKHM1600219"),
+		mk("spotify:track:rem", "Master of Puppets (Remastered)", "USEV19900002"),
+	})
+	if res.Bucket != Exact {
+		t.Fatalf("bucket = %s (%s), want exact via same-album collapse", res.Bucket, res.Note)
+	}
+	if res.Chosen.URI != "spotify:track:rem" {
+		t.Fatalf("chose %s, want the least-adorned edition", res.Chosen.URI)
+	}
+}
+
 // stubSearcher lets us exercise Resolve end-to-end without network.
 type stubSearcher struct{ tracks []model.Track }
 
@@ -239,16 +354,17 @@ func (s stubSearcher) SearchTracks(_ context.Context, _ string, _ int) ([]model.
 type memCache struct {
 	track  model.Track
 	bucket string
+	score  int
 }
 
-func (m *memCache) GetResolution(_ context.Context, _ string) (model.Track, string, bool) {
+func (m *memCache) GetResolution(_ context.Context, _ string) (model.Track, string, int, bool) {
 	if m.track.URI == "" {
-		return model.Track{}, "", false
+		return model.Track{}, "", 0, false
 	}
-	return m.track, m.bucket, true
+	return m.track, m.bucket, m.score, true
 }
-func (m *memCache) PutResolution(_ context.Context, _ string, track model.Track, bucket string) error {
-	m.track, m.bucket = track, bucket
+func (m *memCache) PutResolution(_ context.Context, _ string, track model.Track, bucket string, score int) error {
+	m.track, m.bucket, m.score = track, bucket, score
 	return nil
 }
 
