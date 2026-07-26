@@ -65,6 +65,10 @@ fi
 cat > "${ZDIR}/config.kdl" <<EOF
 default_layout "claude"
 default_mode "locked"
+// No release-notes popup: it spawns as a FOCUSED floating plugin pane, so CLI
+// injection (trigger-server write-chars) types into the popup and is silently
+// swallowed. It is also the clipped popup seen on phone-width terminals.
+show_release_notes false
 web_server true
 web_sharing "on"
 web_server_ip "0.0.0.0"
