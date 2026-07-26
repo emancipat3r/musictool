@@ -85,11 +85,14 @@ const pageTemplate = `<!doctype html>
   .card .n { font-size: 1.65rem; color: var(--accent); font-weight: 650; line-height: 1.2; }
   .card .l { color: var(--fg-dim); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; margin-top: .15rem; }
 
-  section { margin-top: 2.1rem; }
-  section h2 { font-size: .82rem; color: var(--fg-dim); text-transform: uppercase;
-               letter-spacing: .1em; font-weight: 600; margin-bottom: .8rem;
-               display: flex; align-items: baseline; gap: .7rem; }
-  section h2 .sub { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: .78rem; }
+  section { margin-top: 2.4rem; }
+  section h2 { font-size: .95rem; color: var(--fg); text-transform: uppercase;
+               letter-spacing: .09em; font-weight: 700; margin-bottom: .9rem;
+               display: flex; align-items: center; gap: .6rem; }
+  section h2::before { content: ""; width: 4px; height: 1.1em; border-radius: 2px;
+                       background: var(--accent); flex: none; }
+  section h2 .sub { text-transform: none; letter-spacing: 0; font-weight: 400;
+                    font-size: .78rem; color: var(--fg-dim); }
 
   table { width: 100%; border-collapse: collapse; background: var(--bg1);
           border: 1px solid var(--bg2); border-radius: 12px; overflow: hidden; }
