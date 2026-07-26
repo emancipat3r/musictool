@@ -121,6 +121,17 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onReceivedError(WebView v, WebResourceRequest req,
+                                        android.webkit.WebResourceError error) {
+                // Connectivity died mid-session (e.g. Tailscale dropped):
+                // fall back to the gate instead of a browser error page.
+                if (req.isForMainFrame()) {
+                    if (swipe != null) swipe.setRefreshing(false);
+                    probeAndRoute();
+                }
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req) {
                 // Keep dashboard + terminal in-app; hand anything else
                 // (open.spotify.com links etc.) to the system.
@@ -141,7 +152,20 @@ public class MainActivity extends Activity {
         swipe.addView(web);
         swipe.setColorSchemeColors(COL_ACCENT);
         swipe.setProgressBackgroundColorSchemeColor(COL_BG1);
-        swipe.setOnRefreshListener(() -> web.reload());
+        // Pull-to-refresh re-probes first: if the dashboard is no longer
+        // reachable (left wifi, Tailscale off), kick back to the gate rather
+        // than reloading into an error page.
+        swipe.setOnRefreshListener(() -> exec.execute(() -> {
+            boolean ok = probeDashboard();
+            main.post(() -> {
+                if (ok) {
+                    web.reload();
+                } else {
+                    swipe.setRefreshing(false);
+                    probeAndRoute();
+                }
+            });
+        }));
 
         root.addView(gate, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT));
