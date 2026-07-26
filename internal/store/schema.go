@@ -70,11 +70,13 @@ CREATE TABLE IF NOT EXISTS recently_played (
 );
 CREATE INDEX IF NOT EXISTS idx_recent_played_at ON recently_played(played_at);
 
--- Deterministic resolver cache: same input key -> same URI.
+-- Deterministic resolver cache: same input key -> same URI. track_json holds
+-- the full chosen track so cache hits are not hollow (URI-only) objects.
 CREATE TABLE IF NOT EXISTS resolution_cache (
     query_key  TEXT PRIMARY KEY,
     uri        TEXT NOT NULL,
     bucket     TEXT,
+    track_json TEXT,
     created_at TEXT
 );
 

@@ -60,6 +60,27 @@ func (c *Client) ReplaceTracks(ctx context.Context, playlistID string, uris []st
 	return nil
 }
 
+// RemoveTracks deletes the given track URIs from a playlist. Live-verified
+// body shape (2026-07-26): DELETE /playlists/{id}/items {"items":[{"uri":…}]}.
+func (c *Client) RemoveTracks(ctx context.Context, playlistID string, uris []string) error {
+	if len(uris) == 0 {
+		return nil
+	}
+	items := make([]map[string]string, 0, len(uris))
+	for _, u := range uris {
+		items = append(items, map[string]string{"uri": u})
+	}
+	path := fmt.Sprintf("/playlists/%s/items", url.PathEscape(playlistID))
+	return c.do(ctx, "DELETE", path, map[string]any{"items": items}, nil)
+}
+
+// UnfollowPlaylist removes the playlist from the user's library (Spotify's
+// delete semantics for playlists). Live-verified: DELETE /playlists/{id}/followers.
+func (c *Client) UnfollowPlaylist(ctx context.Context, playlistID string) error {
+	path := fmt.Sprintf("/playlists/%s/followers", url.PathEscape(playlistID))
+	return c.do(ctx, "DELETE", path, nil, nil)
+}
+
 // ReadbackURIs returns the actual track URIs currently in the playlist, in
 // order, so the caller can diff intent vs result. Gaps are never hidden.
 func (c *Client) ReadbackURIs(ctx context.Context, playlistID string) ([]string, error) {

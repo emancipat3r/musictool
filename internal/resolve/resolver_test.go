@@ -236,16 +236,19 @@ func (s stubSearcher) SearchTracks(_ context.Context, _ string, _ int) ([]model.
 }
 
 // memCache is an in-memory resolve.Cache for testing bucket passthrough.
-type memCache struct{ uri, bucket string }
-
-func (m *memCache) GetResolution(_ context.Context, _ string) (string, string, bool) {
-	if m.uri == "" {
-		return "", "", false
-	}
-	return m.uri, m.bucket, true
+type memCache struct {
+	track  model.Track
+	bucket string
 }
-func (m *memCache) PutResolution(_ context.Context, _, uri, bucket string) error {
-	m.uri, m.bucket = uri, bucket
+
+func (m *memCache) GetResolution(_ context.Context, _ string) (model.Track, string, bool) {
+	if m.track.URI == "" {
+		return model.Track{}, "", false
+	}
+	return m.track, m.bucket, true
+}
+func (m *memCache) PutResolution(_ context.Context, _ string, track model.Track, bucket string) error {
+	m.track, m.bucket = track, bucket
 	return nil
 }
 
@@ -273,6 +276,44 @@ func TestResolveCachePreservesBucket(t *testing.T) {
 	}
 	if second.Bucket != Probable {
 		t.Fatalf("cached bucket = %s, want probable", second.Bucket)
+	}
+	// Cache replays must carry metadata, not a hollow URI.
+	if second.Chosen.Title == "" || len(second.Chosen.Artists) == 0 {
+		t.Fatalf("cached resolution is hollow: %+v", second.Chosen)
+	}
+}
+
+// Ambiguous options must be spent on distinct recordings: same-ISRC duplicates
+// collapse before the top-3 truncation (live regression: two of three Nirvana
+// options were the same Bleach recording).
+func TestAmbiguousOptionsDedupeByISRC(t *testing.T) {
+	q := model.TrackQuery{Artist: "Nirvana", Title: "About a Girl"}
+	mk := func(uri, isrc, album string) model.Track {
+		tr := trk(uri, "About a Girl", "Nirvana", 0)
+		tr.ISRC = isrc
+		tr.Album = model.Album{Name: album}
+		return tr
+	}
+	res := Score(q, []model.Track{
+		mk("spotify:track:bleach", "USSUB0983403", "Bleach"),
+		mk("spotify:track:deluxe", "USSUB0983403", "Bleach (Deluxe Edition)"),
+		mk("spotify:track:unplugged", "USGF19960103", "MTV Unplugged in New York"),
+		mk("spotify:track:comp", "USGF20020104", "Nirvana"),
+	})
+	if res.Bucket != Ambiguous {
+		t.Fatalf("bucket = %s, want ambiguous (three distinct recordings)", res.Bucket)
+	}
+	seen := map[string]int{}
+	for _, o := range res.Options {
+		seen[o.ISRC]++
+	}
+	for isrc, n := range seen {
+		if n > 1 {
+			t.Fatalf("ISRC %s appears %d times in options; slots wasted on one recording", isrc, n)
+		}
+	}
+	if len(res.Options) != 3 {
+		t.Fatalf("options = %d, want 3 distinct recordings", len(res.Options))
 	}
 }
 

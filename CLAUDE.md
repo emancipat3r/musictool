@@ -27,9 +27,11 @@ connector.
 ## Taste profile
 
 - Lives at `taste-profile.md` on the shared volume (`/data/taste-profile.md`).
-- Load it at the start of any curation work. It is the compression of the whole
-  library into a few KB: pillars, texture preferences, artist tiers (core /
-  worn-out / no, with exceptions), context notes.
+- Load it before building any playlist intended to be *listened to* (curation,
+  discovery, mood mixes). Plumbing/test builds are exempt. It is the
+  compression of the whole library into a few KB: pillars, texture
+  preferences, artist tiers (core / worn-out / no, with exceptions), context
+  notes.
 - **User edits are ground truth.** If the user edits the profile, that wins over
   anything inferred from data. You may propose regenerations; the user's file is
   authoritative.
@@ -45,14 +47,40 @@ connector.
 
 ## Building playlists
 
-1. Curate a list of `{artist, title, album?}` picks.
+1. Curate a list of `{artist, title, album?, duration_ms?}` picks. Include the
+   album up front for any song that has a known live album, remaster era, or a
+   famous title collision — it is the reliable disambiguator.
 2. `resolve_tracklist` to preview buckets (exact / probable / ambiguous /
    not_found), or go straight to `create_playlist_exact`.
 3. `create_playlist_exact` creates the playlist, adds exactly the resolved URIs,
    and returns the read-back. Check `readback_matches`; surface `not_found` and
-   `ambiguous` to the user. For ambiguous picks, choose from the returned top-3.
-4. To settle an ambiguous pick (or add late picks) use `add_to_playlist_exact`
-   on the existing playlist — never rebuild from scratch for a fix-up.
+   `ambiguous` to the user.
+4. Ambiguous picks: the top-3 is NOT guaranteed to contain the right version
+   (a famous original can be crowded out by collabs/live cuts/remasters). If
+   none of the options is clearly the intended recording, do not settle for the
+   closest — re-resolve the pick with `album` (and `duration_ms`) pinned.
+5. To settle an ambiguous pick (or add late picks) use `add_to_playlist_exact`;
+   to prune, `remove_from_playlist_exact`; to discard scratch playlists,
+   `delete_playlist`. Never rebuild from scratch for a fix-up.
+6. If `readback_matches` is false: report the exact diff (expected vs actual
+   URIs) to the user and stop. Do not retry silently and do not "fix" it by
+   re-adding.
+
+## Version policy
+
+Default to the original studio recording. "Chose earliest" in a resolver note
+means releases of the *same* recording were collapsed — that is fine. But never
+pick a live/acoustic/remix/re-recorded variant unless the pick asked for it,
+and prefer the canonical album cut over compilation appearances when choosing
+from ambiguous options.
+
+## Scratch and test playlists
+
+Prefix throwaway playlists with `zz test` so they sort last and are obviously
+disposable, keep them private, and delete them with `delete_playlist` when
+done. If asked for "a test playlist" with no specifics, default to: 3 tracks
+seeded from liked songs, private, named `zz test <YYYY-MM-DD>`. Plumbing tests
+do not need the taste profile.
 
 ## Discovery batches (convention)
 

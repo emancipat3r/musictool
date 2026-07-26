@@ -70,15 +70,24 @@ func TestResolutionCacheRoundTrip(t *testing.T) {
 	if _, _, ok := s.GetResolution(ctx, "k"); ok {
 		t.Fatal("empty cache returned a hit")
 	}
-	if err := s.PutResolution(ctx, "k", "spotify:track:x", "probable"); err != nil {
+	stored := model.Track{
+		URI: "spotify:track:x", ID: "x", Title: "Santeria",
+		Artists: []model.Artist{{Name: "Sublime"}},
+		Album:   model.Album{Name: "Sublime"},
+	}
+	if err := s.PutResolution(ctx, "k", stored, "probable"); err != nil {
 		t.Fatal(err)
 	}
-	uri, bucket, ok := s.GetResolution(ctx, "k")
-	if !ok || uri != "spotify:track:x" {
-		t.Fatalf("cache miss after put: %q %v", uri, ok)
+	got, bucket, ok := s.GetResolution(ctx, "k")
+	if !ok || got.URI != "spotify:track:x" {
+		t.Fatalf("cache miss after put: %+v %v", got, ok)
 	}
 	if bucket != "probable" {
 		t.Fatalf("bucket = %q, want probable (cache must not upgrade confidence)", bucket)
+	}
+	// Cache hits must carry metadata, not hollow URI-only tracks.
+	if got.Title != "Santeria" || got.ArtistName() != "Sublime" {
+		t.Fatalf("cache returned hollow track: %+v", got)
 	}
 }
 

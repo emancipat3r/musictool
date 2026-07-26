@@ -42,6 +42,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
+	// Migration for databases created before track_json existed; the error on
+	// an already-migrated schema is expected and ignored.
+	_, _ = db.ExecContext(context.Background(),
+		`ALTER TABLE resolution_cache ADD COLUMN track_json TEXT`)
 	return &Store{db: db}, nil
 }
 
@@ -217,23 +221,32 @@ func (s *Store) AppendPlays(ctx context.Context, plays []model.PlayEvent) (int, 
 
 // --- resolve.Cache implementation ---
 
-// GetResolution returns a cached URI and its original bucket for a resolver key.
-func (s *Store) GetResolution(ctx context.Context, key string) (string, string, bool) {
+// GetResolution returns the cached chosen track (full metadata when stored,
+// URI-only for legacy rows) and its original bucket for a resolver key.
+func (s *Store) GetResolution(ctx context.Context, key string) (model.Track, string, bool) {
 	var uri string
-	var bucket sql.NullString
+	var bucket, trackJSON sql.NullString
 	err := s.db.QueryRowContext(ctx,
-		`SELECT uri, bucket FROM resolution_cache WHERE query_key=?`, key).Scan(&uri, &bucket)
+		`SELECT uri, bucket, track_json FROM resolution_cache WHERE query_key=?`, key).
+		Scan(&uri, &bucket, &trackJSON)
 	if err != nil {
-		return "", "", false
+		return model.Track{}, "", false
 	}
-	return uri, bucket.String, true
+	t := model.Track{URI: uri}
+	if trackJSON.String != "" {
+		_ = json.Unmarshal([]byte(trackJSON.String), &t)
+		t.URI = uri // uri column stays authoritative
+	}
+	return t, bucket.String, true
 }
 
-// PutResolution stores a resolver decision.
-func (s *Store) PutResolution(ctx context.Context, key, uri, bucket string) error {
+// PutResolution stores a resolver decision with the full chosen track, so
+// cache replays carry title/artist/album instead of a hollow URI.
+func (s *Store) PutResolution(ctx context.Context, key string, track model.Track, bucket string) error {
+	tj, _ := json.Marshal(track)
 	_, err := s.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO resolution_cache(query_key,uri,bucket,created_at) VALUES(?,?,?,?)`,
-		key, uri, bucket, nowRFC3339())
+		`INSERT OR REPLACE INTO resolution_cache(query_key,uri,bucket,track_json,created_at) VALUES(?,?,?,?,?)`,
+		key, track.URI, bucket, string(tj), nowRFC3339())
 	return err
 }
 

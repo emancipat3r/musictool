@@ -132,7 +132,7 @@ func Tools(svc *service.Service) []Tool {
 		},
 		{
 			Name:        "resolve_tracklist",
-			Description: "Deterministically resolve curated {artist,title,album?} picks into exact Spotify URIs. Returns per-pick bucket: exact/probable/ambiguous/not_found. Never substitutes.",
+			Description: "Deterministically resolve curated {artist,title,album?,duration_ms?} picks into exact Spotify URIs. Never substitutes. Buckets: exact = title AND artist match after normalization, unambiguously (ties collapse only when candidates share one ISRC, i.e. the same recording); probable = one side matched exactly, the other partially (accepted, flagged); ambiguous = multiple distinct recordings tied, top-3 returned (deduped by ISRC) for the caller to pick; not_found = nothing matched the title. Scores: title/artist exact are worth 100 each, +25 verbatim title (no version-tag stripping needed), +8 album match, +6 duration within 3s, -15 unrequested live/acoustic/remix variant. Providing album (and duration_ms) is the reliable way to break ties.",
 			InputSchema: obj(map[string]any{
 				"tracks": map[string]any{"type": "array", "items": trackQuerySchema, "description": "curated picks"},
 			}, "tracks"),
@@ -149,12 +149,13 @@ func Tools(svc *service.Service) []Tool {
 		},
 		{
 			Name:        "create_playlist_exact",
-			Description: "Resolve a tracklist, create a playlist, add exactly the resolved URIs, then read the playlist back and diff intent vs result. Gaps are reported, never substituted.",
+			Description: "Resolve a tracklist, create a playlist, add exactly the resolved URIs, then read the playlist back and diff intent vs result. Gaps are reported, never substituted. Idempotent by name: if a same-named playlist exists, nothing is created and the response says so (set allow_duplicate to force).",
 			InputSchema: obj(map[string]any{
-				"name":        strProp("playlist name (e.g. 'Discovery W30')"),
-				"description": strProp("playlist description / rationale"),
-				"public":      boolProp("public playlist (default false)"),
-				"tracks":      map[string]any{"type": "array", "items": trackQuerySchema},
+				"name":               strProp("playlist name (e.g. 'Discovery W30')"),
+				"description":        strProp("playlist description / rationale"),
+				"public":             boolProp("public playlist (default false)"),
+				"tracks":             map[string]any{"type": "array", "items": trackQuerySchema},
+				"allow_duplicate":    boolProp("create even if a same-named playlist exists (default false)"),
 				"record_batch_label": strProp("if set, record this as a discovery batch under this label"),
 			}, "name", "tracks"),
 			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
@@ -163,6 +164,7 @@ func Tools(svc *service.Service) []Tool {
 					Description      string             `json:"description"`
 					Public           bool               `json:"public"`
 					Tracks           []model.TrackQuery `json:"tracks"`
+					AllowDuplicate   bool               `json:"allow_duplicate"`
 					RecordBatchLabel string             `json:"record_batch_label"`
 				}
 				if err := json.Unmarshal(args, &a); err != nil {
@@ -176,8 +178,44 @@ func Tools(svc *service.Service) []Tool {
 					Description:      a.Description,
 					Public:           a.Public,
 					Queries:          a.Tracks,
+					AllowDuplicate:   a.AllowDuplicate,
 					RecordBatchLabel: a.RecordBatchLabel,
 				})
+			},
+		},
+		{
+			Name:        "remove_from_playlist_exact",
+			Description: "Remove tracks from an existing playlist (by id or exact name). Picks are matched against the playlist's actual contents by normalized title+artist (no search); explicit URIs also accepted. Read-back verifies the removals.",
+			InputSchema: obj(map[string]any{
+				"playlist": strProp("playlist id or exact name"),
+				"tracks":   map[string]any{"type": "array", "items": trackQuerySchema, "description": "picks to match against playlist contents"},
+				"uris":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "explicit spotify:track: URIs to remove"},
+			}, "playlist"),
+			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
+				var a struct {
+					Playlist string             `json:"playlist"`
+					Tracks   []model.TrackQuery `json:"tracks"`
+					URIs     []string           `json:"uris"`
+				}
+				if err := json.Unmarshal(args, &a); err != nil {
+					return nil, err
+				}
+				if a.Playlist == "" || (len(a.Tracks) == 0 && len(a.URIs) == 0) {
+					return nil, errors.New("playlist and at least one of tracks/uris are required")
+				}
+				return svc.RemoveExact(ctx, a.Playlist, a.Tracks, a.URIs)
+			},
+		},
+		{
+			Name:        "delete_playlist",
+			Description: "Delete (unfollow) a playlist from the library, by id or exact name. Use for scratch/test playlists and retired batches.",
+			InputSchema: obj(map[string]any{"playlist": strProp("playlist id or exact name")}, "playlist"),
+			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
+				var a struct{ Playlist string `json:"playlist"` }
+				if err := json.Unmarshal(args, &a); err != nil || a.Playlist == "" {
+					return nil, errors.New("playlist is required")
+				}
+				return svc.DeletePlaylist(ctx, a.Playlist)
 			},
 		},
 		{

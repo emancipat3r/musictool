@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/emancipat3r/spotifytool/internal/model"
@@ -24,6 +25,7 @@ type BuildResult struct {
 	Ambiguous       []resolve.Resolution `json:"ambiguous"`
 	ReadbackURIs    []string             `json:"readback_uris"`
 	ReadbackMatches bool                 `json:"readback_matches"`
+	Note            string               `json:"note,omitempty"`
 }
 
 // BuildOptions controls create_playlist_exact.
@@ -32,6 +34,10 @@ type BuildOptions struct {
 	Description string
 	Public      bool
 	Queries     []model.TrackQuery
+	// AllowDuplicate permits creating a playlist whose name already exists.
+	// Off by default so a repeated create is caught instead of silently
+	// producing twins (idempotency guard).
+	AllowDuplicate bool
 	// RecordBatchLabel, when non-empty, records this build as a discovery batch
 	// (used by the weekly batch, not by ad-hoc builds).
 	RecordBatchLabel string
@@ -41,6 +47,18 @@ type BuildOptions struct {
 // resolved URIs, then reads the playlist back and diffs it against intent.
 func (s *Service) BuildExact(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 	res := &BuildResult{Name: opts.Name, Requested: len(opts.Queries)}
+
+	// Idempotency guard: a same-named playlist already existing is far more
+	// often a repeated call than an intent to make twins.
+	if !opts.AllowDuplicate {
+		if existing, err := s.findPlaylist(ctx, opts.Name); err == nil {
+			res.PlaylistID = existing.ID
+			res.PlaylistURI = "spotify:playlist:" + existing.ID
+			res.Note = fmt.Sprintf("a playlist named %q already exists (%d tracks); nothing was created. Use add_to_playlist_exact to extend it, or set allow_duplicate to force a twin.",
+				existing.Name, existing.TrackCount)
+			return res, nil
+		}
+	}
 
 	resolutions, err := s.Res.ResolveList(ctx, opts.Queries)
 	if err != nil {
@@ -166,6 +184,95 @@ func (s *Service) AppendExact(ctx context.Context, playlistRef string, queries [
 	// Verify: previous contents plus the accepted tail, in order.
 	res.ReadbackMatches = equalURIs(append(append([]string{}, existing...), accepted...), readback)
 	return res, nil
+}
+
+// RemoveResult reports an exact removal.
+type RemoveResult struct {
+	PlaylistID       string             `json:"playlist_id"`
+	Name             string             `json:"name"`
+	Removed          int                `json:"removed"`
+	RemovedURIs      []string           `json:"removed_uris"`
+	NotInPlaylist    []model.TrackQuery `json:"not_in_playlist,omitempty"`
+	ReadbackVerified bool               `json:"readback_verified"`
+}
+
+// RemoveExact removes picks from an existing playlist. Picks are matched
+// against the playlist's actual contents by normalized title+artist (no
+// search involved), plus any explicit URIs. Read-back verifies the removals.
+func (s *Service) RemoveExact(ctx context.Context, playlistRef string, queries []model.TrackQuery, uris []string) (*RemoveResult, error) {
+	pl, err := s.findPlaylist(ctx, playlistRef)
+	if err != nil {
+		return nil, err
+	}
+	tracks, err := s.SP.PlaylistTracks(ctx, pl.ID)
+	if err != nil {
+		return nil, err
+	}
+	res := &RemoveResult{PlaylistID: pl.ID, Name: pl.Name}
+
+	toRemove := map[string]bool{}
+	for _, u := range uris {
+		toRemove[u] = true
+	}
+	for _, q := range queries {
+		matched := false
+		for _, t := range tracks {
+			if resolve.NormalizeTitle(t.Title) == resolve.NormalizeTitle(q.Title) &&
+				resolve.NormalizeArtist(t.ArtistName()) == resolve.NormalizeArtist(q.Artist) {
+				toRemove[t.URI] = true
+				matched = true
+			}
+		}
+		if !matched {
+			res.NotInPlaylist = append(res.NotInPlaylist, q)
+		}
+	}
+	// Only remove URIs actually present.
+	present := map[string]bool{}
+	for _, t := range tracks {
+		present[t.URI] = true
+	}
+	for u := range toRemove {
+		if present[u] {
+			res.RemovedURIs = append(res.RemovedURIs, u)
+		}
+	}
+	sort.Strings(res.RemovedURIs)
+
+	if len(res.RemovedURIs) > 0 {
+		if err := s.SP.RemoveTracks(ctx, pl.ID, res.RemovedURIs); err != nil {
+			return res, err
+		}
+	}
+	res.Removed = len(res.RemovedURIs)
+
+	readback, err := s.SP.ReadbackURIs(ctx, pl.ID)
+	if err != nil {
+		return res, err
+	}
+	stillThere := map[string]bool{}
+	for _, u := range readback {
+		stillThere[u] = true
+	}
+	res.ReadbackVerified = true
+	for _, u := range res.RemovedURIs {
+		if stillThere[u] {
+			res.ReadbackVerified = false
+		}
+	}
+	return res, nil
+}
+
+// DeletePlaylist unfollows (removes) a playlist from the library.
+func (s *Service) DeletePlaylist(ctx context.Context, playlistRef string) (map[string]any, error) {
+	pl, err := s.findPlaylist(ctx, playlistRef)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.SP.UnfollowPlaylist(ctx, pl.ID); err != nil {
+		return nil, err
+	}
+	return map[string]any{"deleted": pl.Name, "playlist_id": pl.ID}, nil
 }
 
 // findPlaylist resolves an id or exact (case-insensitive) name against the

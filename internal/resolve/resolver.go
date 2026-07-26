@@ -43,11 +43,11 @@ type Searcher interface {
 }
 
 // Cache stores prior resolutions so identical inputs are free and stable. The
-// bucket is cached alongside the URI so a probable hit replays as probable, not
-// as a false exact.
+// full chosen track and the bucket are cached so a hit replays with metadata
+// (not a hollow URI) and a probable never resurfaces as a false exact.
 type Cache interface {
-	GetResolution(ctx context.Context, key string) (uri, bucket string, ok bool)
-	PutResolution(ctx context.Context, key, uri string, bucket string) error
+	GetResolution(ctx context.Context, key string) (track model.Track, bucket string, ok bool)
+	PutResolution(ctx context.Context, key string, track model.Track, bucket string) error
 }
 
 // Resolver turns curated picks into exact URIs.
@@ -70,12 +70,12 @@ func cacheKey(q model.TrackQuery) string {
 func (r *Resolver) Resolve(ctx context.Context, q model.TrackQuery) (Resolution, error) {
 	key := cacheKey(q)
 	if r.cache != nil {
-		if uri, bucket, ok := r.cache.GetResolution(ctx, key); ok {
+		if track, bucket, ok := r.cache.GetResolution(ctx, key); ok {
 			b := Bucket(bucket)
 			if b != Exact && b != Probable {
 				b = Exact // legacy rows cached before buckets were stored
 			}
-			return Resolution{Query: q, Bucket: b, Chosen: &model.Track{URI: uri}, Note: "from cache"}, nil
+			return Resolution{Query: q, Bucket: b, Chosen: &track, Note: "from cache"}, nil
 		}
 	}
 
@@ -95,7 +95,7 @@ func (r *Resolver) Resolve(ctx context.Context, q model.TrackQuery) (Resolution,
 
 	res := Score(q, cands)
 	if r.cache != nil && (res.Bucket == Exact || res.Bucket == Probable) && res.Chosen != nil {
-		_ = r.cache.PutResolution(ctx, key, res.Chosen.URI, string(res.Bucket))
+		_ = r.cache.PutResolution(ctx, key, *res.Chosen, string(res.Bucket))
 	}
 	return res, nil
 }
@@ -350,13 +350,26 @@ func earliestRelease(tracks []model.Track) model.Track {
 	return best
 }
 
+// topTracks returns up to n candidates for an ambiguous result, deduped by
+// ISRC first so the option slots are spent on genuinely distinct recordings
+// (live regression: two of three Nirvana options were the same recording on
+// Bleach vs Bleach Deluxe).
 func topTracks(ranked []scored, n int) []model.Track {
-	if n > len(ranked) {
-		n = len(ranked)
-	}
+	seen := map[string]bool{}
 	out := make([]model.Track, 0, n)
-	for i := 0; i < n; i++ {
-		out = append(out, ranked[i].track)
+	for _, r := range ranked {
+		key := r.track.ISRC
+		if key == "" {
+			key = "\x00" + r.track.URI
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, r.track)
+		if len(out) >= n {
+			break
+		}
 	}
 	return out
 }
