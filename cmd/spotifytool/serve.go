@@ -92,6 +92,8 @@ func cmdServe(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
+		// Deep-link into the claude session; "/" never shows the picker.
+		tp.SetSession(envOr("SPOTIFYTOOL_ZELLIJ_SESSION", "claude"))
 		// No ReadHeaderTimeout here: long-lived terminal WebSockets.
 		srv := &http.Server{Addr: *termAddr, Handler: tp}
 		servers = append(servers, srv)

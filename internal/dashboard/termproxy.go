@@ -28,12 +28,18 @@ import (
 type TermProxy struct {
 	upstream  *url.URL
 	tokenPath string
+	session   string
 	transport *http.Transport
 	proxy     *httputil.ReverseProxy
 
 	mu      sync.Mutex
 	cookies []*http.Cookie
 }
+
+// SetSession names the zellij session the proxy deep-links into: requests to
+// "/" redirect to "/{session}" so the web client attaches directly instead of
+// showing its session picker (where a stray tap starts a NEW session).
+func (tp *TermProxy) SetSession(name string) { tp.session = name }
 
 // NewTermProxy builds the proxy for upstream (e.g. https://sandbox:8082),
 // reading the login token from tokenPath at login time.
@@ -153,6 +159,10 @@ func (tp *TermProxy) ensureLogin() error {
 // ServeHTTP logs in lazily, then forwards (WebSocket upgrades included —
 // httputil.ReverseProxy handles Connection: Upgrade passthrough).
 func (tp *TermProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if tp.session != "" && r.URL.Path == "/" {
+		http.Redirect(w, r, "/"+tp.session, http.StatusFound)
+		return
+	}
 	if err := tp.ensureLogin(); err != nil {
 		logx.Errorf("terminal proxy: %v", err)
 		http.Error(w, "terminal auth bootstrap failed: "+err.Error(), http.StatusServiceUnavailable)
