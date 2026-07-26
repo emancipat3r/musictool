@@ -98,6 +98,11 @@ public class MainActivity extends Activity {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true); // theme choice lives in localStorage
+        // Honor the page's <meta viewport>: without these the WebView invents
+        // its own layout viewport, which breaks vh-sized elements (terminal
+        // iframe, profile editor) and media queries.
+        s.setUseWideViewPort(true);
+        s.setLoadWithOverviewMode(true);
         web.setBackgroundColor(0xFF282828);
         web.setWebViewClient(new WebViewClient() {
             @Override

@@ -160,7 +160,7 @@ const pageTemplate = `<!doctype html>
   .muted { color: var(--fg-dim); }
   .pill { display: inline-block; background: var(--bg1); border: 1px solid var(--bg2);
           border-radius: 999px; padding: .1rem .6rem; font-size: .74rem; color: var(--fg-dim); }
-  textarea { width: 100%; min-height: 60vh; background: var(--bg1); color: var(--fg);
+  textarea { width: 100%; min-height: max(60vh, 420px); background: var(--bg1); color: var(--fg);
              border: 1px solid var(--bg2); border-radius: 12px; padding: 1rem;
              font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
   button { background: var(--accent); color: var(--accent-fg); border: 0; border-radius: 10px;
@@ -168,8 +168,8 @@ const pageTemplate = `<!doctype html>
            transition: transform .12s ease; }
   button:hover { transform: translateY(-1px); }
   .saved { color: var(--green); margin-left: 1rem; }
-  .term iframe { width: 100%; height: calc(100vh - 170px); border: 1px solid var(--bg2);
-                 border-radius: 12px; background: #14151a; }
+  .term iframe { width: 100%; height: calc(100vh - 170px); min-height: 480px;
+                 border: 1px solid var(--bg2); border-radius: 12px; background: #14151a; }
   code { background: var(--bg1); border: 1px solid var(--bg2); border-radius: 6px;
          padding: .08rem .38rem; font-size: .85em; color: var(--accent); }
 
