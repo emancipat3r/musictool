@@ -12,6 +12,10 @@ set -euo pipefail
 
 SESSION="${ZELLIJ_SESSION:-claude}"
 WEB_PORT="${ZELLIJ_WEB_PORT:-8082}"
+# Belt-and-braces with the Dockerfile ENV: the zellij server snapshots this
+# environment at session creation, and panes inherit it. Without TERM, every
+# TUI in the session renders monochrome.
+export TERM="${TERM:-xterm-256color}" COLORTERM="${COLORTERM:-truecolor}"
 CERT_DIR="${ZELLIJ_CERT_DIR:-/certs}"      # optional ro mount of cert.pem/key.pem
 GEN_DIR="/data/zellij-certs"                # fallback: self-signed, persisted on the shared volume
 ZDIR=/root/.config/zellij

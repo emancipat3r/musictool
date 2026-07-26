@@ -36,6 +36,10 @@ WORKDIR /workspace
 # Required for --dangerously-skip-permissions when running as root: declares
 # this a contained sandbox environment to Claude Code.
 ENV IS_SANDBOX=1
+# The entrypoint has no TTY, so nothing sets TERM; the zellij server (and thus
+# every pane) inherits that empty environment and Claude Code renders in
+# black-and-white. Declare the capabilities the web client actually has.
+ENV TERM=xterm-256color COLORTERM=truecolor
 # The mounted repo is owned by the host user while claude runs as root; without
 # this, every git command fails with "detected dubious ownership".
 RUN git config --global --add safe.directory /workspace
