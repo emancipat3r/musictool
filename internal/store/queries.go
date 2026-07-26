@@ -27,6 +27,7 @@ type LibraryStats struct {
 	Albums        int     `json:"albums"`
 	PlayEvents    int     `json:"play_events"`
 	Keepers       int     `json:"keepers"`
+	Disliked      int     `json:"disliked"`
 	LastSync      string  `json:"last_sync,omitempty"`
 	LastBatch     string  `json:"last_batch,omitempty"`
 	TopArtists    []Count `json:"top_artists,omitempty"`
@@ -52,6 +53,7 @@ type RecentSignals struct {
 	NewSaves             []TrackRef  `json:"new_saves"`
 	Repeats              []RepeatRef `json:"repeats"`
 	NewKeepers           []TrackRef  `json:"new_keepers"`
+	NewDislikes          []TrackRef  `json:"new_dislikes"`
 	IgnoredFromLastBatch []TrackRef  `json:"ignored_from_last_batch"`
 	Summary              string      `json:"summary"`
 }
@@ -71,6 +73,7 @@ func (s *Store) Stats(ctx context.Context) (LibraryStats, error) {
 		Albums:      countRow(ctx, s.db, `SELECT COUNT(*) FROM albums`),
 		PlayEvents:  countRow(ctx, s.db, `SELECT COUNT(*) FROM recently_played`),
 		Keepers:     countRow(ctx, s.db, `SELECT COUNT(*) FROM keepers`),
+		Disliked:    countRow(ctx, s.db, `SELECT COUNT(*) FROM disliked`),
 	}
 	if v, ok := s.GetMeta(ctx, "last_sync"); ok {
 		st.LastSync = v
@@ -115,6 +118,7 @@ func (s *Store) Signals(ctx context.Context) (RecentSignals, error) {
 		NewSaves:             []TrackRef{},
 		Repeats:              []RepeatRef{},
 		NewKeepers:           []TrackRef{},
+		NewDislikes:          []TrackRef{},
 		IgnoredFromLastBatch: []TrackRef{},
 	}
 
@@ -151,6 +155,15 @@ func (s *Store) Signals(ctx context.Context) (RecentSignals, error) {
 		 WHERE k.first_seen > ? ORDER BY k.first_seen DESC LIMIT 50`, since)
 	if err == nil {
 		sig.NewKeepers = keepers
+	}
+
+	// New dislikes since the window (explicit-negative votes).
+	dislikes, err := s.queryTrackRefs(ctx,
+		`SELECT t.id,t.uri,t.title,t.primary_artist FROM disliked d
+		 JOIN tracks t ON t.id=d.track_id
+		 WHERE d.first_seen > ? ORDER BY d.first_seen DESC LIMIT 50`, since)
+	if err == nil {
+		sig.NewDislikes = dislikes
 	}
 
 	// Ignored: tracks from the last batch playlist with zero plays since it
@@ -253,7 +266,19 @@ func (s *Store) Playlists(ctx context.Context) ([]model.Playlist, error) {
 
 // SyncKeepers snapshots current membership of the Keepers playlist. New members
 // get a first_seen stamp; departed members are removed.
-func (s *Store) SyncKeepers(ctx context.Context, keeperTrackIDs []string) error {
+func (s *Store) SyncKeepers(ctx context.Context, trackIDs []string) error {
+	return s.syncVoteTable(ctx, "keepers", trackIDs)
+}
+
+// SyncDisliked snapshots the Disliked playlist (the explicit-negative channel)
+// with the same diff semantics as Keepers.
+func (s *Store) SyncDisliked(ctx context.Context, trackIDs []string) error {
+	return s.syncVoteTable(ctx, "disliked", trackIDs)
+}
+
+// syncVoteTable diffs a vote playlist's membership into its snapshot table.
+// table is a compile-time constant name, never user input.
+func (s *Store) syncVoteTable(ctx context.Context, table string, trackIDs []string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -262,16 +287,16 @@ func (s *Store) SyncKeepers(ctx context.Context, keeperTrackIDs []string) error 
 
 	now := nowRFC3339()
 	present := map[string]bool{}
-	for _, id := range keeperTrackIDs {
+	for _, id := range trackIDs {
 		present[id] = true
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO keepers(track_id,first_seen) VALUES(?,?)
+			`INSERT INTO `+table+`(track_id,first_seen) VALUES(?,?)
 			 ON CONFLICT(track_id) DO NOTHING`, id, now); err != nil {
 			return err
 		}
 	}
-	// Remove keepers no longer in the playlist.
-	rows, err := tx.QueryContext(ctx, `SELECT track_id FROM keepers`)
+	// Remove votes no longer in the playlist.
+	rows, err := tx.QueryContext(ctx, `SELECT track_id FROM `+table)
 	if err != nil {
 		return err
 	}
@@ -288,11 +313,36 @@ func (s *Store) SyncKeepers(ctx context.Context, keeperTrackIDs []string) error 
 	}
 	rows.Close()
 	for _, id := range toDelete {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM keepers WHERE track_id=?`, id); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE track_id=?`, id); err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
+}
+
+// DislikedKeys returns the disliked track ids and, where known, their ISRCs —
+// so a build can refuse a disliked recording even when it resolves to a
+// different release of the same song.
+func (s *Store) DislikedKeys(ctx context.Context) (ids, isrcs map[string]bool, err error) {
+	ids, isrcs = map[string]bool{}, map[string]bool{}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT d.track_id, COALESCE(t.isrc,'') FROM disliked d
+		 LEFT JOIN tracks t ON t.id = d.track_id`)
+	if err != nil {
+		return ids, isrcs, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, isrc string
+		if err := rows.Scan(&id, &isrc); err != nil {
+			return ids, isrcs, err
+		}
+		ids[id] = true
+		if isrc != "" {
+			isrcs[isrc] = true
+		}
+	}
+	return ids, isrcs, rows.Err()
 }
 
 // Batch is a shipped discovery batch record.
@@ -369,6 +419,6 @@ func (s *Store) PlayHistoryDaily(ctx context.Context, days int) ([]Count, error)
 }
 
 func summarize(sig RecentSignals) string {
-	return fmt.Sprintf("since %s: %d new saves, %d repeats, %d new keepers, %d ignored from last batch",
-		sig.Since, len(sig.NewSaves), len(sig.Repeats), len(sig.NewKeepers), len(sig.IgnoredFromLastBatch))
+	return fmt.Sprintf("since %s: %d new saves, %d repeats, %d new keepers, %d new dislikes, %d ignored from last batch",
+		sig.Since, len(sig.NewSaves), len(sig.Repeats), len(sig.NewKeepers), len(sig.NewDislikes), len(sig.IgnoredFromLastBatch))
 }

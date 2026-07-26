@@ -30,6 +30,30 @@ type BuildResult struct {
 	Created         bool   `json:"created"`
 	Reason          string `json:"reason,omitempty"`
 	Note            string `json:"note,omitempty"`
+	// DislikedSkipped lists picks that resolved to a recording in the user's
+	// Disliked playlist. They are never added; remove the track from Disliked
+	// to make it eligible again.
+	DislikedSkipped []resolve.Resolution `json:"disliked_skipped,omitempty"`
+}
+
+// dislikedFilter holds the Disliked vote channel's keys, loaded once per
+// operation. A pick matches by track id or ISRC, so another release of the
+// same recording still counts as disliked.
+type dislikedFilter struct{ ids, isrcs map[string]bool }
+
+func (s *Service) loadDislikedFilter(ctx context.Context) dislikedFilter {
+	ids, isrcs, err := s.DB.DislikedKeys(ctx)
+	if err != nil {
+		return dislikedFilter{}
+	}
+	return dislikedFilter{ids: ids, isrcs: isrcs}
+}
+
+func (f dislikedFilter) hits(t *model.Track) bool {
+	if t == nil {
+		return false
+	}
+	return f.ids[t.ID] || (t.ISRC != "" && f.isrcs[t.ISRC])
 }
 
 // BuildOptions controls create_playlist_exact.
@@ -77,11 +101,16 @@ func (s *Service) BuildExact(ctx context.Context, opts BuildOptions) (*BuildResu
 	}
 	res.Resolutions = resolutions
 
+	disliked := s.loadDislikedFilter(ctx)
 	var accepted []string
 	seen := map[string]bool{}
 	for _, r := range resolutions {
 		switch r.Bucket {
 		case resolve.Exact, resolve.Probable:
+			if disliked.hits(r.Chosen) {
+				res.DislikedSkipped = append(res.DislikedSkipped, r)
+				continue
+			}
 			if r.Chosen != nil && r.Chosen.URI != "" && !seen[r.Chosen.URI] {
 				accepted = append(accepted, r.Chosen.URI)
 				seen[r.Chosen.URI] = true
@@ -169,10 +198,15 @@ func (s *Service) AppendExact(ctx context.Context, playlistRef string, queries [
 		present[u] = true
 	}
 
+	disliked := s.loadDislikedFilter(ctx)
 	var accepted []string
 	for _, r := range resolutions {
 		switch r.Bucket {
 		case resolve.Exact, resolve.Probable:
+			if disliked.hits(r.Chosen) {
+				res.DislikedSkipped = append(res.DislikedSkipped, r)
+				continue
+			}
 			if r.Chosen != nil && r.Chosen.URI != "" && !present[r.Chosen.URI] {
 				accepted = append(accepted, r.Chosen.URI)
 				present[r.Chosen.URI] = true

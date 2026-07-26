@@ -36,14 +36,20 @@ connector.
   anything inferred from data. You may propose regenerations; the user's file is
   authoritative.
 
-## Keepers semantics
+## Vote channels: Keepers and Disliked
 
 - The **Keepers** playlist is the explicit-positive vote channel: one tap = one
   strong vote. `get_recent_signals` surfaces new Keepers since the last batch.
-- An optional **Nope** playlist is a negative channel; otherwise skips + silence
-  cover negatives. Real skip data isn't in the API, so
-  `ignored_from_last_batch` (batch tracks with zero plays since shipping) is the
-  honest negative proxy.
+- The **Disliked** playlist is the explicit-negative channel: the user drops
+  tracks there (usually from playlists you built) that missed. Treat every
+  entry as a strong "never again" for that recording, and weigh the artists
+  and styles there as negative signal during curation. The engine enforces the
+  track-level rule itself: builds and appends refuse disliked recordings (by
+  id or ISRC) and report them under `disliked_skipped` — do not try to work
+  around it; tell the user instead.
+- Passive negatives still count: real skip data isn't in the API, so
+  `ignored_from_last_batch` (batch tracks with zero plays since shipping) is
+  the honest silent-negative proxy.
 
 ## Building playlists
 

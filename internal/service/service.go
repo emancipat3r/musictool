@@ -24,6 +24,11 @@ import (
 // KeepersPlaylistName is the conventional explicit-positive vote channel.
 const KeepersPlaylistName = "Keepers"
 
+// DislikedPlaylistName is the explicit-negative vote channel (the PRD's
+// optional "Nope" playlist): the user drops tracks here that a build got
+// wrong, and the engine refuses to re-add them.
+const DislikedPlaylistName = "Disliked"
+
 // Service holds the wired-up engine.
 type Service struct {
 	Cfg config.Config
@@ -74,6 +79,7 @@ type SyncResult struct {
 	Keepers         int               `json:"keepers"`
 	PlaylistsDeep   int               `json:"playlists_deep_synced"`
 	Skipped         []SkippedPlaylist `json:"skipped,omitempty"`
+	Disliked        int               `json:"disliked"`
 	NonOwnedSkipped int               `json:"non_owned_skipped,omitempty"`
 }
 
@@ -147,11 +153,12 @@ func (s *Service) Sync(ctx context.Context, full bool) (SyncResult, error) {
 	logx.Infof("sync: playlist tracks (full=%v)…", full)
 	batchPlaylistIDs := s.batchPlaylistIDs(ctx)
 	for _, p := range pls {
-		// Keepers is the explicit-vote channel: only a playlist the USER owns
-		// qualifies, or a followed stranger's "Keepers" could overwrite it.
-		isKeepers := strings.EqualFold(p.Name, KeepersPlaylistName) &&
-			(userID == "" || p.OwnerID == userID)
-		mustHave := isKeepers || batchPlaylistIDs[p.ID]
+		// Vote channels: only playlists the USER owns qualify, or a followed
+		// stranger's same-named playlist could overwrite them.
+		owned := userID == "" || p.OwnerID == userID
+		isKeepers := strings.EqualFold(p.Name, KeepersPlaylistName) && owned
+		isDisliked := strings.EqualFold(p.Name, DislikedPlaylistName) && owned
+		mustHave := isKeepers || isDisliked || batchPlaylistIDs[p.ID]
 		if !full && !mustHave {
 			continue
 		}
@@ -169,16 +176,24 @@ func (s *Service) Sync(ctx context.Context, full bool) (SyncResult, error) {
 			return fail(err)
 		}
 		res.PlaylistsDeep++
-		if isKeepers {
+		if isKeepers || isDisliked {
 			ids := make([]string, 0, len(tracks))
 			for _, t := range tracks {
 				ids = append(ids, t.ID)
 			}
-			if err := s.DB.SyncKeepers(ctx, ids); err != nil {
-				return fail(err)
+			if isKeepers {
+				if err := s.DB.SyncKeepers(ctx, ids); err != nil {
+					return fail(err)
+				}
+				res.Keepers = len(ids)
+				logx.Infof("sync: keepers membership: %d", len(ids))
+			} else {
+				if err := s.DB.SyncDisliked(ctx, ids); err != nil {
+					return fail(err)
+				}
+				res.Disliked = len(ids)
+				logx.Infof("sync: disliked membership: %d", len(ids))
 			}
-			res.Keepers = len(ids)
-			logx.Infof("sync: keepers membership: %d", len(ids))
 		}
 	}
 	if len(res.Skipped) > 0 {

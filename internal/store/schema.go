@@ -106,6 +106,14 @@ CREATE TABLE IF NOT EXISTS keepers (
     first_seen TEXT
 );
 
+-- Disliked = the explicit-negative vote channel (the PRD's optional "Nope"
+-- playlist). Same snapshot semantics as keepers; builds refuse to re-add
+-- anything in here.
+CREATE TABLE IF NOT EXISTS disliked (
+    track_id   TEXT PRIMARY KEY,
+    first_seen TEXT
+);
+
 -- Bookkeeping (last sync time, last batch time, etc.).
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,

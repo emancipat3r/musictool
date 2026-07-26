@@ -69,7 +69,7 @@ func Tools(svc *service.Service) []Tool {
 		},
 		{
 			Name:        "get_recent_signals",
-			Description: "Distilled feedback since the last discovery batch: new saves, repeats, new Keepers votes, and tracks from the last batch that were ignored.",
+			Description: "Distilled feedback since the last discovery batch: new saves, repeats, new Keepers votes (explicit positive), new Disliked votes (explicit negative), and tracks from the last batch that were ignored.",
 			InputSchema: obj(nil),
 			Handler: func(ctx context.Context, _ json.RawMessage) (any, error) {
 				return svc.DB.Signals(ctx)
@@ -191,7 +191,7 @@ func Tools(svc *service.Service) []Tool {
 		},
 		{
 			Name:        "create_playlist_exact",
-			Description: "Resolve a tracklist, create a playlist, add exactly the resolved URIs, then read the playlist back and diff intent vs result. Gaps are reported, never substituted. Idempotent by name: if a same-named playlist exists, nothing is created and the response says so (set allow_duplicate to force).",
+			Description: "Resolve a tracklist, create a playlist, add exactly the resolved URIs, then read the playlist back and diff intent vs result. Gaps are reported, never substituted. Idempotent by name: if a same-named playlist exists, nothing is created and the response says so (set allow_duplicate to force). Picks matching the user's Disliked playlist are refused and reported under disliked_skipped.",
 			InputSchema: obj(map[string]any{
 				"name":               strProp("playlist name (e.g. 'Discovery W30')"),
 				"description":        strProp("playlist description / rationale"),
@@ -264,7 +264,7 @@ func Tools(svc *service.Service) []Tool {
 		},
 		{
 			Name:        "add_to_playlist_exact",
-			Description: "Resolve picks and append them to an EXISTING playlist (by id or exact name), with read-back verification of the appended tail. Duplicates already present are skipped. Use this to settle ambiguous picks after a build instead of rebuilding.",
+			Description: "Resolve picks and append them to an EXISTING playlist (by id or exact name), with read-back verification of the appended tail. Duplicates already present are skipped, and picks matching the user's Disliked playlist are refused (disliked_skipped). Use this to settle ambiguous picks after a build instead of rebuilding.",
 			InputSchema: obj(map[string]any{
 				"playlist": strProp("playlist id or exact name"),
 				"tracks":   map[string]any{"type": "array", "items": trackQuerySchema},

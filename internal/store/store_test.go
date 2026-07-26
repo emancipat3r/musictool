@@ -165,6 +165,35 @@ func TestSignalsEmptyListsAreNotNull(t *testing.T) {
 	}
 }
 
+// The Disliked channel mirrors Keepers: membership diffs in and out, keys are
+// retrievable by id and ISRC for build-time refusal.
+func TestDislikedSyncAndKeys(t *testing.T) {
+	ctx := context.Background()
+	s := openTemp(t)
+	_ = s.ReplaceSavedTracks(ctx, []model.SavedTrack{
+		{Track: model.Track{ID: "d1", URI: "u1", Title: "Meh", ISRC: "ISRC001",
+			Artists: []model.Artist{{ID: "ar", Name: "X"}}}},
+	})
+	if err := s.SyncDisliked(ctx, []string{"d1"}); err != nil {
+		t.Fatal(err)
+	}
+	ids, isrcs, err := s.DislikedKeys(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ids["d1"] || !isrcs["ISRC001"] {
+		t.Fatalf("keys missing: ids=%v isrcs=%v", ids, isrcs)
+	}
+	// Un-dislike prunes.
+	if err := s.SyncDisliked(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	ids, _, _ = s.DislikedKeys(ctx)
+	if len(ids) != 0 {
+		t.Fatalf("dislike not pruned: %v", ids)
+	}
+}
+
 func TestKeepersDiff(t *testing.T) {
 	ctx := context.Background()
 	s := openTemp(t)
