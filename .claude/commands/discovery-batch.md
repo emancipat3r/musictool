@@ -36,6 +36,12 @@ Determine the ISO week number first (`date +%V`); call it W##.
    - Call `mcp__spotify__create_playlist_exact` with name "Discovery W##", a
      description carrying your rationale, public=false, the ~10 picks, and
      record_batch_label "W##".
+   - Second run in the same week: the create returns `created: false` with
+     `reason: "name_exists"` (a benign guard, not an error). NEVER set
+     allow_duplicate. Instead append the new picks to the existing
+     "Discovery W##" with `mcp__spotify__add_to_playlist_exact` (duplicates
+     are skipped automatically) and title the digest section "W## second
+     run". One playlist per week, always.
    - Inspect the returned read-back. If `readback_matches` is false or there
      are not_found/ambiguous entries, report them honestly. Never substitute
      silently.
