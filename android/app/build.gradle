@@ -1,0 +1,36 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'com.spotifytool.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.spotifytool.app"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    // Fixed keystore so updates install in place (same discipline as the
+    // Hour Tracker app: never regenerate, never tell the user to uninstall).
+    signingConfigs {
+        stable {
+            storeFile file('spotifytool.keystore')
+            storePassword 'android'
+            keyAlias 'spotifytool'
+            keyPassword 'android'
+        }
+    }
+    buildTypes {
+        debug { signingConfig signingConfigs.stable }
+        release {
+            signingConfig signingConfigs.stable
+            minifyEnabled false
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
