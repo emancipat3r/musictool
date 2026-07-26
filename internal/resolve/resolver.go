@@ -62,14 +62,18 @@ func New(search Searcher, cache Cache) *Resolver {
 	return &Resolver{search: search, cache: cache}
 }
 
-// cacheEpoch versions the cache key space. Bump it whenever scoring changes so
-// entries decided under old rules (e.g. the pre-album-aware scoring that could
-// cache a soundtrack cut as exact) are orphaned instead of replayed forever.
-const cacheEpoch = "v2"
+// cacheEpoch versions the cache key space. Bump it whenever scoring or key
+// composition changes so entries decided under old rules (e.g. the
+// pre-album-aware scoring that could cache a soundtrack cut as exact) are
+// orphaned instead of replayed forever.
+const cacheEpoch = "v3"
 
-// cacheKey is the stable key for a query: epoch|normalized artist|title|album.
+// cacheKey is the stable key for a query. EVERY input that affects scoring
+// must be part of the key — duration_ms included, or a cached no-duration
+// answer silently shadows a duration-pinned re-resolve.
 func cacheKey(q model.TrackQuery) string {
-	return cacheEpoch + "\x1f" + NormalizeArtist(q.Artist) + "\x1f" + NormalizeTitle(q.Title) + "\x1f" + NormalizeTitle(q.Album)
+	return fmt.Sprintf("%s\x1f%s\x1f%s\x1f%s\x1f%d",
+		cacheEpoch, NormalizeArtist(q.Artist), NormalizeTitle(q.Title), NormalizeTitle(q.Album), q.DurationMs)
 }
 
 // Resolve resolves a single pick, consulting the cache first.

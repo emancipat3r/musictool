@@ -132,7 +132,10 @@ func (s *Store) ReplaceSavedTracks(ctx context.Context, saved []model.SavedTrack
 	return tx.Commit()
 }
 
-// ReplacePlaylists rewrites the playlist metadata set.
+// ReplacePlaylists refreshes the playlist metadata set by upserting the
+// current playlists and pruning only the ones that vanished. It must NOT
+// delete-and-reinsert: playlist_tracks cascades on playlist deletion, so a
+// wholesale rewrite would wipe the deep sync's work on every hourly run.
 func (s *Store) ReplacePlaylists(ctx context.Context, pls []model.Playlist) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -140,15 +143,41 @@ func (s *Store) ReplacePlaylists(ctx context.Context, pls []model.Playlist) erro
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM playlists`); err != nil {
+	now := nowRFC3339()
+	present := map[string]bool{}
+	for _, p := range pls {
+		present[p.ID] = true
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO playlists(id,name,description,public,owner_id,snapshot_id,track_count,updated_at)
+			 VALUES(?,?,?,?,?,?,?,?)
+			 ON CONFLICT(id) DO UPDATE SET
+			   name=excluded.name, description=excluded.description,
+			   public=excluded.public, owner_id=excluded.owner_id,
+			   snapshot_id=excluded.snapshot_id, track_count=excluded.track_count,
+			   updated_at=excluded.updated_at`,
+			p.ID, p.Name, p.Description, boolInt(p.Public), p.OwnerID, p.SnapshotID, p.TrackCount, now); err != nil {
+			return err
+		}
+	}
+	// Prune playlists no longer in the account (cascade removes their tracks).
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM playlists`)
+	if err != nil {
 		return err
 	}
-	now := nowRFC3339()
-	for _, p := range pls {
-		if _, err := tx.ExecContext(ctx,
-			`INSERT OR REPLACE INTO playlists(id,name,description,public,owner_id,snapshot_id,track_count,updated_at)
-			 VALUES(?,?,?,?,?,?,?,?)`,
-			p.ID, p.Name, p.Description, boolInt(p.Public), p.OwnerID, p.SnapshotID, p.TrackCount, now); err != nil {
+	var gone []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		if !present[id] {
+			gone = append(gone, id)
+		}
+	}
+	rows.Close()
+	for _, id := range gone {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM playlists WHERE id=?`, id); err != nil {
 			return err
 		}
 	}

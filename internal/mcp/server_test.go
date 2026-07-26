@@ -15,7 +15,9 @@ func testServer() *Server {
 			Description: "echoes back its message",
 			InputSchema: obj(map[string]any{"msg": strProp("message")}, "msg"),
 			Handler: func(_ context.Context, args json.RawMessage) (any, error) {
-				var a struct{ Msg string `json:"msg"` }
+				var a struct {
+					Msg string `json:"msg"`
+				}
 				_ = json.Unmarshal(args, &a)
 				return map[string]any{"echo": a.Msg}, nil
 			},

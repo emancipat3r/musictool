@@ -36,6 +36,9 @@ WORKDIR /workspace
 # Required for --dangerously-skip-permissions when running as root: declares
 # this a contained sandbox environment to Claude Code.
 ENV IS_SANDBOX=1
+# The mounted repo is owned by the host user while claude runs as root; without
+# this, every git command fails with "detected dubious ownership".
+RUN git config --global --add safe.directory /workspace
 COPY deploy/sandbox-entrypoint.sh /usr/local/bin/sandbox-entrypoint.sh
 RUN chmod +x /usr/local/bin/sandbox-entrypoint.sh
 

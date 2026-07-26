@@ -343,6 +343,21 @@ func TestSameAlbumMasteringsCollapse(t *testing.T) {
 	}
 }
 
+// Audit finding: duration_ms was absent from the cache key, so a cached
+// no-duration answer silently shadowed a duration-pinned re-resolve. Every
+// scoring input must produce a distinct key.
+func TestCacheKeyIncludesDuration(t *testing.T) {
+	base := model.TrackQuery{Artist: "Sublime", Title: "Santeria"}
+	pinned := model.TrackQuery{Artist: "Sublime", Title: "Santeria", DurationMs: 999_000}
+	if cacheKey(base) == cacheKey(pinned) {
+		t.Fatal("duration_ms must be part of the cache key")
+	}
+	albumPinned := model.TrackQuery{Artist: "Sublime", Title: "Santeria", Album: "Sublime"}
+	if cacheKey(base) == cacheKey(albumPinned) {
+		t.Fatal("album must be part of the cache key")
+	}
+}
+
 // stubSearcher lets us exercise Resolve end-to-end without network.
 type stubSearcher struct{ tracks []model.Track }
 

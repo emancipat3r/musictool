@@ -21,16 +21,16 @@ type TrackRef struct {
 
 // LibraryStats is the distilled library summary for get_library_stats.
 type LibraryStats struct {
-	SavedTracks   int    `json:"saved_tracks"`
-	Playlists     int    `json:"playlists"`
-	Artists       int    `json:"artists"`
-	Albums        int    `json:"albums"`
-	PlayEvents    int    `json:"play_events"`
-	Keepers       int    `json:"keepers"`
-	LastSync      string `json:"last_sync,omitempty"`
-	LastBatch     string `json:"last_batch,omitempty"`
+	SavedTracks   int     `json:"saved_tracks"`
+	Playlists     int     `json:"playlists"`
+	Artists       int     `json:"artists"`
+	Albums        int     `json:"albums"`
+	PlayEvents    int     `json:"play_events"`
+	Keepers       int     `json:"keepers"`
+	LastSync      string  `json:"last_sync,omitempty"`
+	LastBatch     string  `json:"last_batch,omitempty"`
 	TopArtists    []Count `json:"top_artists,omitempty"`
-	RecentAdds30d int    `json:"recent_adds_30d"`
+	RecentAdds30d int     `json:"recent_adds_30d"`
 }
 
 // Count is a name/count pair.
@@ -106,10 +106,17 @@ func (s *Store) batchSince(ctx context.Context) string {
 	return time.Now().UTC().AddDate(0, 0, -30).Format(time.RFC3339)
 }
 
-// Signals distills feedback since the last batch.
+// Signals distills feedback since the last batch. Every list field is always
+// a non-nil slice: [] means "nothing new", never "no data".
 func (s *Store) Signals(ctx context.Context) (RecentSignals, error) {
 	since := s.batchSince(ctx)
-	sig := RecentSignals{Since: since}
+	sig := RecentSignals{
+		Since:                since,
+		NewSaves:             []TrackRef{},
+		Repeats:              []RepeatRef{},
+		NewKeepers:           []TrackRef{},
+		IgnoredFromLastBatch: []TrackRef{},
+	}
 
 	// New saves since the window.
 	saves, err := s.queryTrackRefs(ctx,
@@ -148,7 +155,9 @@ func (s *Store) Signals(ctx context.Context) (RecentSignals, error) {
 
 	// Ignored: tracks from the last batch playlist with zero plays since it
 	// shipped — an honest negative signal (real skip data isn't in the API).
-	sig.IgnoredFromLastBatch = s.ignoredFromLastBatch(ctx)
+	if ignored := s.ignoredFromLastBatch(ctx); ignored != nil {
+		sig.IgnoredFromLastBatch = ignored
+	}
 
 	sig.Summary = summarize(sig)
 	return sig, nil
@@ -184,17 +193,20 @@ func (s *Store) ignoredFromLastBatch(ctx context.Context) []TrackRef {
 	return out
 }
 
+// queryTrackRefs always returns a non-nil slice: "no rows" must serialize as
+// [] so callers can tell empty from missing (the null-vs-empty ambiguity that
+// bit read_playlist and get_recent_signals).
 func (s *Store) queryTrackRefs(ctx context.Context, q string, args ...any) ([]TrackRef, error) {
+	out := make([]TrackRef, 0, 8)
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
-		return nil, err
+		return out, err
 	}
 	defer rows.Close()
-	var out []TrackRef
 	for rows.Next() {
 		var r TrackRef
 		if err := rows.Scan(&r.ID, &r.URI, &r.Title, &r.Artist); err != nil {
-			return nil, err
+			return out, err
 		}
 		out = append(out, r)
 	}
@@ -234,20 +246,10 @@ func (s *Store) Playlists(ctx context.Context) ([]model.Playlist, error) {
 	return out, rows.Err()
 }
 
-// PlaylistTracks returns the compact ordered tracks for a playlist id (or, if
-// idOrName is not an id, the first playlist whose name matches).
-func (s *Store) PlaylistTracks(ctx context.Context, idOrName string) ([]TrackRef, error) {
-	id := idOrName
-	var exists int
-	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM playlists WHERE id=?`, idOrName).Scan(&exists)
-	if exists == 0 {
-		_ = s.db.QueryRowContext(ctx, `SELECT id FROM playlists WHERE name=? LIMIT 1`, idOrName).Scan(&id)
-	}
-	return s.queryTrackRefs(ctx,
-		`SELECT t.id,t.uri,t.title,t.primary_artist FROM playlist_tracks pt
-		 JOIN tracks t ON t.id=pt.track_id
-		 WHERE pt.playlist_id=? ORDER BY pt.position`, id)
-}
+// (The old PlaylistTracks id-or-name lookup was removed: it had no callers and
+// its unscoped WHERE name=? LIMIT 1 was exactly the ambiguity hazard the
+// owner-scoped service.findPlaylist exists to prevent. Live playlist reads go
+// through service.ReadPlaylist.)
 
 // SyncKeepers snapshots current membership of the Keepers playlist. New members
 // get a first_seen stamp; departed members are removed.

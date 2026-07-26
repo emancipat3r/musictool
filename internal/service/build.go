@@ -15,15 +15,15 @@ import (
 // resolved, and the verified read-back so the caller can diff intent vs result.
 // Gaps are reported, never silently substituted.
 type BuildResult struct {
-	PlaylistID      string               `json:"playlist_id"`
-	PlaylistURI     string               `json:"playlist_uri"`
-	Name            string               `json:"name"`
-	Requested       int                  `json:"requested"`
-	Added           int                  `json:"added"`
-	Resolutions     []resolve.Resolution `json:"resolutions"`
-	NotFound        []model.TrackQuery   `json:"not_found"`
-	Ambiguous       []resolve.Resolution `json:"ambiguous"`
-	ReadbackURIs    []string             `json:"readback_uris"`
+	PlaylistID   string               `json:"playlist_id"`
+	PlaylistURI  string               `json:"playlist_uri"`
+	Name         string               `json:"name"`
+	Requested    int                  `json:"requested"`
+	Added        int                  `json:"added"`
+	Resolutions  []resolve.Resolution `json:"resolutions"`
+	NotFound     []model.TrackQuery   `json:"not_found"`
+	Ambiguous    []resolve.Resolution `json:"ambiguous"`
+	ReadbackURIs []string             `json:"readback_uris"`
 	// ReadbackMatches is nil when no write happened (e.g. the name_exists
 	// no-op), so a benign refusal is never mistaken for a failed verification.
 	ReadbackMatches *bool  `json:"readback_matches,omitempty"`

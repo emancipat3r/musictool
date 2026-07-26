@@ -46,9 +46,9 @@ func TestTokenExpiry(t *testing.T) {
 
 func TestParsePasted(t *testing.T) {
 	cases := []struct {
-		in         string
-		wantCode   string
-		wantState  string
+		in        string
+		wantCode  string
+		wantState string
 	}{
 		{"http://127.0.0.1:8888/callback?code=ABC&state=XYZ", "ABC", "XYZ"},
 		{"code=DEF&state=QRS", "DEF", "QRS"},

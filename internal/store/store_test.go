@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -111,6 +113,55 @@ func TestAppendPlaysCreatesMinimalTrackRow(t *testing.T) {
 	}
 	if title != "New Find" {
 		t.Fatalf("title = %q", title)
+	}
+}
+
+// Audit finding: the hourly ReplacePlaylists used DELETE FROM playlists, and
+// playlist_tracks cascades on playlist deletion — so every hourly sync wiped
+// the daily deep sync. Upserting must preserve playlist_tracks for surviving
+// playlists and cascade only for genuinely removed ones.
+func TestReplacePlaylistsPreservesPlaylistTracks(t *testing.T) {
+	ctx := context.Background()
+	s := openTemp(t)
+	pls := []model.Playlist{
+		{ID: "pl1", Name: "Deck", TrackCount: 1},
+		{ID: "pl2", Name: "Old", TrackCount: 1},
+	}
+	if err := s.ReplacePlaylists(ctx, pls); err != nil {
+		t.Fatal(err)
+	}
+	tr := model.Track{ID: "t1", URI: "u1", Title: "A", Artists: []model.Artist{{ID: "a", Name: "X"}}}
+	if err := s.ReplacePlaylistTracks(ctx, "pl1", []model.Track{tr}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReplacePlaylistTracks(ctx, "pl2", []model.Track{tr}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Hourly refresh with pl2 gone: pl1's tracks survive, pl2's cascade away.
+	if err := s.ReplacePlaylists(ctx, pls[:1]); err != nil {
+		t.Fatal(err)
+	}
+	if n := countRow(ctx, s.db, `SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id='pl1'`); n != 1 {
+		t.Fatalf("pl1 tracks = %d, want 1 (hourly sync must not wipe deep sync)", n)
+	}
+	if n := countRow(ctx, s.db, `SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id='pl2'`); n != 0 {
+		t.Fatalf("pl2 tracks = %d, want 0 (removed playlist should cascade)", n)
+	}
+}
+
+// Audit finding: signal lists must serialize as [], never null — "nothing new"
+// and "no data" are different claims.
+func TestSignalsEmptyListsAreNotNull(t *testing.T) {
+	ctx := context.Background()
+	s := openTemp(t)
+	sig, err := s.Signals(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(sig)
+	if strings.Contains(string(b), "null") {
+		t.Fatalf("signals contain null lists: %s", b)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/emancipat3r/spotifytool/internal/model"
 	"github.com/emancipat3r/spotifytool/internal/service"
 	"github.com/emancipat3r/spotifytool/internal/spotify"
+	"github.com/emancipat3r/spotifytool/internal/store"
 )
 
 // obj is a small helper for building JSON-Schema fragments. A nil props map
@@ -25,8 +26,12 @@ func obj(props map[string]any, required ...string) map[string]any {
 	return m
 }
 
-func strProp(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
-func intProp(desc string) map[string]any { return map[string]any{"type": "integer", "description": desc} }
+func strProp(desc string) map[string]any {
+	return map[string]any{"type": "string", "description": desc}
+}
+func intProp(desc string) map[string]any {
+	return map[string]any{"type": "integer", "description": desc}
+}
 func boolProp(desc string) map[string]any {
 	return map[string]any{"type": "boolean", "description": desc}
 }
@@ -47,7 +52,9 @@ func Tools(svc *service.Service) []Tool {
 			Description: "Refresh liked songs, playlists, recently-played history (append-only), and Keepers membership from Spotify into local SQLite. Set full=true for a deep sync of every playlist's tracks.",
 			InputSchema: obj(map[string]any{"full": boolProp("deep-sync all playlist tracks")}),
 			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
-				var a struct{ Full bool `json:"full"` }
+				var a struct {
+					Full bool `json:"full"`
+				}
 				_ = json.Unmarshal(args, &a)
 				return svc.Sync(ctx, a.Full)
 			},
@@ -112,8 +119,8 @@ func Tools(svc *service.Service) []Tool {
 					if ownedOnly && userID != "" && p.OwnerID != userID {
 						continue
 					}
-					if len(p.Description) > 100 {
-						p.Description = p.Description[:100] + "…"
+					if r := []rune(p.Description); len(r) > 100 {
+						p.Description = string(r[:100]) + "…"
 					}
 					out = append(out, p)
 					if len(out) >= limit {
@@ -128,7 +135,9 @@ func Tools(svc *service.Service) []Tool {
 			Description: "Read a playlist's tracks LIVE from Spotify, by id or exact name (name matching is scoped to playlists the user owns). An unknown playlist is an error; an empty playlist returns an empty list — never null.",
 			InputSchema: obj(map[string]any{"playlist": strProp("playlist id or exact name")}, "playlist"),
 			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
-				var a struct{ Playlist string `json:"playlist"` }
+				var a struct {
+					Playlist string `json:"playlist"`
+				}
 				if err := json.Unmarshal(args, &a); err != nil || a.Playlist == "" {
 					return nil, errors.New("playlist id or name is required")
 				}
@@ -163,12 +172,14 @@ func Tools(svc *service.Service) []Tool {
 		},
 		{
 			Name:        "resolve_tracklist",
-			Description: "Deterministically resolve curated {artist,title,album?,duration_ms?} picks into exact Spotify URIs. Never substitutes. Buckets: exact = title AND artist match after normalization, unambiguously (ties collapse only when candidates share one ISRC, i.e. the same recording); probable = one side matched exactly, the other partially (accepted, flagged); ambiguous = multiple distinct recordings tied, top-3 returned (deduped by ISRC) for the caller to pick; not_found = nothing matched the title. Scores: title/artist exact are worth 100 each, +25 verbatim title (no version-tag stripping needed), +8 album match, +6 duration within 3s, -15 unrequested live/acoustic/remix variant. Providing album (and duration_ms) is the reliable way to break ties.",
+			Description: "Deterministically resolve curated {artist,title,album?,duration_ms?} picks into exact Spotify URIs. Never substitutes. Buckets: exact = title AND artist match after normalization, unambiguously (ties collapse only when candidates share one ISRC, i.e. the same recording); probable = one side matched exactly, the other partially (accepted, flagged); ambiguous = multiple distinct recordings tied, top-3 returned (deduped by ISRC) for the caller to pick; not_found = nothing matched the title. Scores: title/artist exact are worth 100 each, +25 verbatim title (remaster tags exempt), +8 album match, +6 duration within 3s, -15 unrequested live/acoustic/remix variant, -12 non-canonical album (soundtrack/hits/karaoke/tribute) unless that album was pinned. Providing album (and duration_ms) is the reliable way to break ties.",
 			InputSchema: obj(map[string]any{
 				"tracks": map[string]any{"type": "array", "items": trackQuerySchema, "description": "curated picks"},
 			}, "tracks"),
 			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
-				var a struct{ Tracks []model.TrackQuery `json:"tracks"` }
+				var a struct {
+					Tracks []model.TrackQuery `json:"tracks"`
+				}
 				if err := json.Unmarshal(args, &a); err != nil {
 					return nil, err
 				}
@@ -242,7 +253,9 @@ func Tools(svc *service.Service) []Tool {
 			Description: "Delete (unfollow) a playlist from the library, by id or exact name. Use for scratch/test playlists and retired batches.",
 			InputSchema: obj(map[string]any{"playlist": strProp("playlist id or exact name")}, "playlist"),
 			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
-				var a struct{ Playlist string `json:"playlist"` }
+				var a struct {
+					Playlist string `json:"playlist"`
+				}
 				if err := json.Unmarshal(args, &a); err != nil || a.Playlist == "" {
 					return nil, errors.New("playlist is required")
 				}
@@ -271,11 +284,32 @@ func Tools(svc *service.Service) []Tool {
 			},
 		},
 		{
+			Name:        "get_batches",
+			Description: "Recent discovery batches (label, playlist id, when, track count, digest) so a new batch can avoid repeating what already shipped.",
+			InputSchema: obj(map[string]any{"limit": intProp("max rows (default 20)")}),
+			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
+				var a struct {
+					Limit int `json:"limit"`
+				}
+				_ = json.Unmarshal(args, &a)
+				batches, err := svc.DB.ListBatches(ctx, a.Limit)
+				if err != nil {
+					return nil, err
+				}
+				if batches == nil {
+					batches = []store.Batch{}
+				}
+				return batches, nil
+			},
+		},
+		{
 			Name:        "get_artist_tags",
 			Description: "Last.fm tags + similar artists for an artist (discovery seed), served from local cache when available. Subjective qualities are tags, not audio-feature math.",
 			InputSchema: obj(map[string]any{"artist": strProp("artist name")}, "artist"),
 			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
-				var a struct{ Artist string `json:"artist"` }
+				var a struct {
+					Artist string `json:"artist"`
+				}
 				if err := json.Unmarshal(args, &a); err != nil || a.Artist == "" {
 					return nil, errors.New("artist is required")
 				}
@@ -287,7 +321,9 @@ func Tools(svc *service.Service) []Tool {
 			Description: "Similar-artist names for an artist (Last.fm), a discovery seed replacing Spotify's deprecated related-artists.",
 			InputSchema: obj(map[string]any{"artist": strProp("artist name")}, "artist"),
 			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
-				var a struct{ Artist string `json:"artist"` }
+				var a struct {
+					Artist string `json:"artist"`
+				}
 				if err := json.Unmarshal(args, &a); err != nil || a.Artist == "" {
 					return nil, errors.New("artist is required")
 				}

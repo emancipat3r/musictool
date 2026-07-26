@@ -60,18 +60,26 @@ func (c *Client) ReplaceTracks(ctx context.Context, playlistID string, uris []st
 	return nil
 }
 
-// RemoveTracks deletes the given track URIs from a playlist. Live-verified
-// body shape (2026-07-26): DELETE /playlists/{id}/items {"items":[{"uri":…}]}.
+// RemoveTracks deletes the given track URIs from a playlist, batched at the
+// API's 100-item cap like AddTracks. Live-verified body shape (2026-07-26):
+// DELETE /playlists/{id}/items {"items":[{"uri":…}]}.
 func (c *Client) RemoveTracks(ctx context.Context, playlistID string, uris []string) error {
-	if len(uris) == 0 {
-		return nil
-	}
-	items := make([]map[string]string, 0, len(uris))
-	for _, u := range uris {
-		items = append(items, map[string]string{"uri": u})
-	}
+	const batch = 100
 	path := fmt.Sprintf("/playlists/%s/items", url.PathEscape(playlistID))
-	return c.do(ctx, "DELETE", path, map[string]any{"items": items}, nil)
+	for i := 0; i < len(uris); i += batch {
+		end := i + batch
+		if end > len(uris) {
+			end = len(uris)
+		}
+		items := make([]map[string]string, 0, end-i)
+		for _, u := range uris[i:end] {
+			items = append(items, map[string]string{"uri": u})
+		}
+		if err := c.do(ctx, "DELETE", path, map[string]any{"items": items}, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // UnfollowPlaylist removes the playlist from the user's library (Spotify's

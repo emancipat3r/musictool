@@ -68,13 +68,13 @@ type SkippedPlaylist struct {
 
 // SyncResult summarizes a sync run.
 type SyncResult struct {
-	SavedTracks    int               `json:"saved_tracks"`
-	Playlists      int               `json:"playlists"`
-	NewPlays       int               `json:"new_plays"`
-	Keepers        int               `json:"keepers"`
-	PlaylistsDeep  int               `json:"playlists_deep_synced"`
-	Skipped        []SkippedPlaylist `json:"skipped,omitempty"`
-	NonOwnedSkipped int              `json:"non_owned_skipped,omitempty"`
+	SavedTracks     int               `json:"saved_tracks"`
+	Playlists       int               `json:"playlists"`
+	NewPlays        int               `json:"new_plays"`
+	Keepers         int               `json:"keepers"`
+	PlaylistsDeep   int               `json:"playlists_deep_synced"`
+	Skipped         []SkippedPlaylist `json:"skipped,omitempty"`
+	NonOwnedSkipped int               `json:"non_owned_skipped,omitempty"`
 }
 
 // Sync refreshes liked songs, playlist metadata, recently-played history
@@ -147,7 +147,10 @@ func (s *Service) Sync(ctx context.Context, full bool) (SyncResult, error) {
 	logx.Infof("sync: playlist tracks (full=%v)…", full)
 	batchPlaylistIDs := s.batchPlaylistIDs(ctx)
 	for _, p := range pls {
-		isKeepers := strings.EqualFold(p.Name, KeepersPlaylistName)
+		// Keepers is the explicit-vote channel: only a playlist the USER owns
+		// qualifies, or a followed stranger's "Keepers" could overwrite it.
+		isKeepers := strings.EqualFold(p.Name, KeepersPlaylistName) &&
+			(userID == "" || p.OwnerID == userID)
 		mustHave := isKeepers || batchPlaylistIDs[p.ID]
 		if !full && !mustHave {
 			continue
