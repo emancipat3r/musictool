@@ -14,18 +14,29 @@ android {
 
     // Fixed keystore so updates install in place (same discipline as the
     // Hour Tracker app: never regenerate, never tell the user to uninstall).
+    // The keystore is NOT committed (open-source hygiene) — generate your own
+    // once and keep it forever:
+    //   keytool -genkeypair -keystore spotifytool.keystore -alias spotifytool \
+    //     -storepass android -keypass android -keyalg RSA -validity 10000 \
+    //     -dname CN=spotifytool
+    // Without one, builds fall back to the default debug signing.
+    def stableKeystore = file('spotifytool.keystore')
     signingConfigs {
-        stable {
-            storeFile file('spotifytool.keystore')
-            storePassword 'android'
-            keyAlias 'spotifytool'
-            keyPassword 'android'
+        if (stableKeystore.exists()) {
+            stable {
+                storeFile stableKeystore
+                storePassword 'android'
+                keyAlias 'spotifytool'
+                keyPassword 'android'
+            }
         }
     }
     buildTypes {
-        debug { signingConfig signingConfigs.stable }
+        debug {
+            if (stableKeystore.exists()) signingConfig signingConfigs.stable
+        }
         release {
-            signingConfig signingConfigs.stable
+            if (stableKeystore.exists()) signingConfig signingConfigs.stable
             minifyEnabled false
         }
     }

@@ -22,6 +22,10 @@ token.json
 id_ed25519*
 *.pem
 
+# App signing keystores (purged from history 2026-08-14; keep local-only —
+# a spare copy lives at ~/.local/share/spotifytool-secrets/)
+*.keystore
+
 # session/debug droppings
 *.err
 build*.json
