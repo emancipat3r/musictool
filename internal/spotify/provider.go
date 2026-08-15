@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/emancipat3r/spotifytool/internal/model"
-	"github.com/emancipat3r/spotifytool/internal/provider"
+	"github.com/emancipat3r/musictool/internal/model"
+	"github.com/emancipat3r/musictool/internal/provider"
 )
 
 // Compile-time proof that Client implements the provider surface.

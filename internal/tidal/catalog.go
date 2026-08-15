@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/emancipat3r/spotifytool/internal/model"
+	"github.com/emancipat3r/musictool/internal/model"
 )
 
 // The attrs structs mirror only the fields spotifytool consumes from TIDAL

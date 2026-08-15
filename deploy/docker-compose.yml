@@ -1,4 +1,4 @@
-# spotifytool — one compose file, two containers, one shared volume. LAN-only.
+# musictool — one compose file, two containers, one shared volume. LAN-only.
 #
 # Network posture (hard requirement): nothing is published to the public
 # internet. Services bind to the compose network and, where host access is
@@ -14,8 +14,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.spotify
-    image: spotifytool:latest
-    container_name: spotifytool-spotify
+    image: musictool:latest
+    container_name: musictool-engine
     restart: unless-stopped
     environment:
       # Provider selection: spotify (default) or tidal. The entrypoint enforces
@@ -31,21 +31,21 @@ services:
       # Terminal pane target: the auth-injecting proxy (HTTPS: browsers only
       # allow clipboard access in secure contexts, so plain HTTP would break
       # copy in the terminal). Override TERMINAL_URL to point elsewhere.
-      SPOTIFYTOOL_TERMINAL_URL: ${TERMINAL_URL:-https://${LAN_IP:-127.0.0.1}:8083}
+      MUSICTOOL_TERMINAL_URL: ${TERMINAL_URL:-https://${LAN_IP:-127.0.0.1}:8083}
       # Plain-HTTP twin lane for the companion app (Android WebView JS
       # WebSockets ignore the app's SSL handler, so self-signed wss breaks
       # the terminal in-app; the app uses these instead).
-      SPOTIFYTOOL_TERMINAL_URL_HTTP: ${TERMINAL_URL_HTTP:-http://${LAN_IP:-127.0.0.1}:8084}
+      MUSICTOOL_TERMINAL_URL_HTTP: ${TERMINAL_URL_HTTP:-http://${LAN_IP:-127.0.0.1}:8084}
       # Dashboard + terminal proxy serve TLS with the shared self-signed pair
       # (generated on the state volume at boot; one warning-accept per device).
-      SPOTIFYTOOL_TLS_CERT: /data/zellij-certs/cert.pem
-      SPOTIFYTOOL_TLS_KEY: /data/zellij-certs/key.pem
+      MUSICTOOL_TLS_CERT: /data/zellij-certs/cert.pem
+      MUSICTOOL_TLS_KEY: /data/zellij-certs/key.pem
       # The proxy logs into zellij web over the compose network using the
       # token captured on the shared volume, then forwards everything
       # (WebSockets included) with the session cookie attached.
-      SPOTIFYTOOL_ZELLIJ_UPSTREAM: https://sandbox:8082
+      MUSICTOOL_ZELLIJ_UPSTREAM: https://sandbox:8082
       # Sandbox trigger endpoint for the dashboard's Run-discovery-batch button.
-      SPOTIFYTOOL_TRIGGER_URL: http://sandbox:8090
+      MUSICTOOL_TRIGGER_URL: http://sandbox:8090
       TZ: ${TZ:-America/New_York}
     volumes:
       - state:/data
@@ -66,8 +66,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.sandbox
-    image: spotifytool-sandbox:latest
-    container_name: spotifytool-sandbox
+    image: musictool-sandbox:latest
+    container_name: musictool-sandbox
     restart: unless-stopped
     environment:
       TZ: ${TZ:-America/New_York}

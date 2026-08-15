@@ -1,4 +1,4 @@
-# Container 2 — the engine + dashboard. Builds the static spotifytool binary and
+# Container 2 — the engine + dashboard. Builds the static musictool binary and
 # runs `serve` (MCP over Streamable HTTP + read-only dashboard). Cron drives the
 # hourly sync and weekly discovery batch.
 #
@@ -11,7 +11,7 @@ COPY go.mod go.sum* ./
 RUN go mod download
 COPY . .
 ARG VERSION=docker
-RUN go build -ldflags "-s -w -X main.version=${VERSION}" -o /out/spotifytool ./cmd/spotifytool
+RUN go build -ldflags "-s -w -X main.version=${VERSION}" -o /out/musictool ./cmd/musictool
 
 # Runtime: small image with busybox cron + CA certs. This container is pure Go:
 # no node, no Claude CLI, no model invocations of any kind. All Claude usage
@@ -20,16 +20,16 @@ RUN go build -ldflags "-s -w -X main.version=${VERSION}" -o /out/spotifytool ./c
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata busybox-suid openssl
 WORKDIR /app
-COPY --from=build /out/spotifytool /usr/local/bin/spotifytool
+COPY --from=build /out/musictool /usr/local/bin/musictool
 COPY deploy/crontab /etc/crontabs/root
 
 # Shared-volume defaults; override in compose if desired.
-ENV SPOTIFYTOOL_DATA_DIR=/data \
-    SPOTIFYTOOL_CONFIG_DIR=/data/config \
-    SPOTIFYTOOL_PROFILE=/data/taste-profile.md \
-    SPOTIFYTOOL_DIGEST_DIR=/data/digests \
-    SPOTIFYTOOL_MCP_ADDR=:8080 \
-    SPOTIFYTOOL_DASH_ADDR=:8081
+ENV MUSICTOOL_DATA_DIR=/data \
+    MUSICTOOL_CONFIG_DIR=/data/config \
+    MUSICTOOL_PROFILE=/data/taste-profile.md \
+    MUSICTOOL_DIGEST_DIR=/data/digests \
+    MUSICTOOL_MCP_ADDR=:8080 \
+    MUSICTOOL_DASH_ADDR=:8081
 
 EXPOSE 8080 8081
 VOLUME ["/data"]

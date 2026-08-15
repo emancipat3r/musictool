@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/emancipat3r/spotifytool/internal/apperr"
-	"github.com/emancipat3r/spotifytool/internal/config"
-	"github.com/emancipat3r/spotifytool/internal/logx"
+	"github.com/emancipat3r/musictool/internal/apperr"
+	"github.com/emancipat3r/musictool/internal/config"
+	"github.com/emancipat3r/musictool/internal/logx"
 )
 
 // Options controls the interactive `auth` subcommand.
@@ -219,7 +219,7 @@ func exchangeCode(ctx context.Context, ep Endpoints, code, verifier string) (*To
 
 func writePage(w http.ResponseWriter, msg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, "<!doctype html><html><body style=\"font-family:sans-serif;padding:3rem\"><h2>spotifytool</h2><p>%s</p></body></html>", msg)
+	fmt.Fprintf(w, "<!doctype html><html><body style=\"font-family:sans-serif;padding:3rem\"><h2>musictool</h2><p>%s</p></body></html>", msg)
 }
 
 // tryOpenBrowser makes a best-effort attempt to launch a browser; failure is

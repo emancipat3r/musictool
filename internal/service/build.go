@@ -6,9 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/emancipat3r/spotifytool/internal/model"
-	"github.com/emancipat3r/spotifytool/internal/resolve"
-	"github.com/emancipat3r/spotifytool/internal/store"
+	"github.com/emancipat3r/musictool/internal/model"
+	"github.com/emancipat3r/musictool/internal/resolve"
+	"github.com/emancipat3r/musictool/internal/store"
 )
 
 // BuildResult is the full outcome of an exact build: what was requested, what

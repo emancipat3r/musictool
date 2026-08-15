@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/emancipat3r/spotifytool/internal/model"
+	"github.com/emancipat3r/musictool/internal/model"
 )
 
 // SearchTracks searches with Spotify field filters, never free text. The

@@ -6,9 +6,9 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/emancipat3r/spotifytool/internal/model"
-	"github.com/emancipat3r/spotifytool/internal/service"
-	"github.com/emancipat3r/spotifytool/internal/store"
+	"github.com/emancipat3r/musictool/internal/model"
+	"github.com/emancipat3r/musictool/internal/service"
+	"github.com/emancipat3r/musictool/internal/store"
 )
 
 // obj is a small helper for building JSON-Schema fragments. A nil props map

@@ -27,10 +27,10 @@ fi
 # data immediately. Non-fatal if it fails (e.g. token not yet minted).
 if [ -n "${SPOTIFY_REFRESH_TOKEN:-}" ] || [ -n "${TIDAL_REFRESH_TOKEN:-}" ]; then
   echo "boot: initial sync…" >&2
-  spotifytool sync >/dev/null 2>>/data/sync.log || echo "boot sync failed (see /data/sync.log)" >&2
+  musictool sync >/dev/null 2>>/data/sync.log || echo "boot sync failed (see /data/sync.log)" >&2
 fi
 
 # Launch cron in the background (busybox crond, foreground -f to a subshell).
 crond -b -l 8
 
-exec spotifytool serve
+exec musictool serve

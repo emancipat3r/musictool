@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/emancipat3r/spotifytool/internal/model"
+	"github.com/emancipat3r/musictool/internal/model"
 )
 
 // itemRefsBatch is the JSON:API payload for playlist item add/remove. The

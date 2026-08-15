@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/emancipat3r/spotifytool/internal/apperr"
-	"github.com/emancipat3r/spotifytool/internal/logx"
+	"github.com/emancipat3r/musictool/internal/apperr"
+	"github.com/emancipat3r/musictool/internal/logx"
 )
 
 // earlyRefresh is how long before nominal expiry we proactively refresh, to
@@ -42,7 +42,7 @@ func LoadToken(path string) (*Token, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, apperr.Auth(fmt.Errorf("no token cache at %s; run `spotifytool auth`", path))
+			return nil, apperr.Auth(fmt.Errorf("no token cache at %s; run `musictool auth`", path))
 		}
 		return nil, apperr.Auth(fmt.Errorf("read token cache: %w", err))
 	}
@@ -159,7 +159,7 @@ func (ts *TokenSource) AccessToken(ctx context.Context) (string, error) {
 		return ts.tok.AccessToken, nil
 	}
 	if ts.tok.RefreshToken == "" {
-		return "", apperr.Auth(errors.New("no refresh token; run `spotifytool auth`"))
+		return "", apperr.Auth(errors.New("no refresh token; run `musictool auth`"))
 	}
 	if err := ts.refreshLocked(ctx); err != nil {
 		return "", err
@@ -231,7 +231,7 @@ func doTokenRequest(ctx context.Context, hc *http.Client, tokenURL string, form 
 		return tokenResponse{}, apperr.Auth(fmt.Errorf("decode token response (status %d): %w", res.StatusCode, err))
 	}
 	if tr.Error != "" || res.StatusCode >= 400 {
-		return tokenResponse{}, apperr.Auth(fmt.Errorf("token grant failed (status %d): %s %s; run `spotifytool auth`",
+		return tokenResponse{}, apperr.Auth(fmt.Errorf("token grant failed (status %d): %s %s; run `musictool auth`",
 			res.StatusCode, tr.Error, tr.ErrorDesc))
 	}
 	return tr, nil

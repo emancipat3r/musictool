@@ -13,9 +13,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/emancipat3r/spotifytool/internal/apperr"
-	"github.com/emancipat3r/spotifytool/internal/config"
-	"github.com/emancipat3r/spotifytool/internal/logx"
+	"github.com/emancipat3r/musictool/internal/apperr"
+	"github.com/emancipat3r/musictool/internal/config"
+	"github.com/emancipat3r/musictool/internal/logx"
 )
 
 // tokenProvider yields a valid bearer token, refreshing as needed.
@@ -123,7 +123,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 
 		defer res.Body.Close()
 		if res.StatusCode == http.StatusUnauthorized {
-			return apperr.Auth(fmt.Errorf("401 from Spotify; token invalid — run `spotifytool auth`"))
+			return apperr.Auth(fmt.Errorf("401 from Spotify; token invalid — run `musictool auth`"))
 		}
 		if res.StatusCode >= 400 {
 			return apperr.API(decodeAPIError(res))

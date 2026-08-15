@@ -11,16 +11,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/emancipat3r/spotifytool/internal/apperr"
-	"github.com/emancipat3r/spotifytool/internal/auth"
-	"github.com/emancipat3r/spotifytool/internal/config"
-	"github.com/emancipat3r/spotifytool/internal/lastfm"
-	"github.com/emancipat3r/spotifytool/internal/logx"
-	"github.com/emancipat3r/spotifytool/internal/provider"
-	"github.com/emancipat3r/spotifytool/internal/resolve"
-	"github.com/emancipat3r/spotifytool/internal/spotify"
-	"github.com/emancipat3r/spotifytool/internal/store"
-	"github.com/emancipat3r/spotifytool/internal/tidal"
+	"github.com/emancipat3r/musictool/internal/apperr"
+	"github.com/emancipat3r/musictool/internal/auth"
+	"github.com/emancipat3r/musictool/internal/config"
+	"github.com/emancipat3r/musictool/internal/lastfm"
+	"github.com/emancipat3r/musictool/internal/logx"
+	"github.com/emancipat3r/musictool/internal/provider"
+	"github.com/emancipat3r/musictool/internal/resolve"
+	"github.com/emancipat3r/musictool/internal/spotify"
+	"github.com/emancipat3r/musictool/internal/store"
+	"github.com/emancipat3r/musictool/internal/tidal"
 )
 
 // KeepersPlaylistName is the conventional explicit-positive vote channel.
@@ -71,7 +71,7 @@ func New(cfg config.Config) (*Service, error) {
 	ctx := context.Background()
 	if prev, ok := db.GetMeta(ctx, "provider"); ok && prev != "" && prev != sp.Name() {
 		db.Close()
-		return nil, fmt.Errorf("data dir %s belongs to provider %q; set MUSIC_PROVIDER=%s or point SPOTIFYTOOL_DATA_DIR at a fresh directory",
+		return nil, fmt.Errorf("data dir %s belongs to provider %q; set MUSIC_PROVIDER=%s or point MUSICTOOL_DATA_DIR at a fresh directory",
 			cfg.DataDir, prev, prev)
 	} else if !ok || prev == "" {
 		_ = db.SetMeta(ctx, "provider", sp.Name())

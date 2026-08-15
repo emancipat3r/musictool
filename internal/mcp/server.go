@@ -16,7 +16,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/emancipat3r/spotifytool/internal/logx"
+	"github.com/emancipat3r/musictool/internal/logx"
 )
 
 // protocolVersion is the MCP revision this server implements.

@@ -99,6 +99,15 @@ type Config struct {
 	DataDir   string // holds the SQLite db, taste profile, digests
 }
 
+// Env reads a MUSICTOOL_-prefixed variable, falling back to the legacy
+// SPOTIFYTOOL_ prefix so pre-rename deployments keep working unchanged.
+func Env(suffix string) string {
+	if v := strings.TrimSpace(os.Getenv("MUSICTOOL_" + suffix)); v != "" {
+		return v
+	}
+	return strings.TrimSpace(os.Getenv("SPOTIFYTOOL_" + suffix))
+}
+
 // TokenPath is the 0600 token cache location, per provider so switching
 // MUSIC_PROVIDER never reads the other provider's tokens. Spotify keeps the
 // historical token.json name.
@@ -109,13 +118,21 @@ func (c Config) TokenPath() string {
 	return filepath.Join(c.ConfigDir, "token.json")
 }
 
-// DBPath is the SQLite database file.
-func (c Config) DBPath() string { return filepath.Join(c.DataDir, "spotifytool.db") }
+// DBPath is the SQLite database file. An existing pre-rename spotifytool.db is
+// kept in place; only fresh data dirs get the new name.
+func (c Config) DBPath() string {
+	legacy := filepath.Join(c.DataDir, "spotifytool.db")
+	if _, err := os.Stat(legacy); err == nil {
+		return legacy
+	}
+	return filepath.Join(c.DataDir, "musictool.db")
+}
 
 // ProfilePath is the taste-profile.md location, overridable via
-// SPOTIFYTOOL_PROFILE for the shared-volume deployment.
+// MUSICTOOL_PROFILE (legacy SPOTIFYTOOL_PROFILE) for the shared-volume
+// deployment.
 func (c Config) ProfilePath() string {
-	if p := os.Getenv("SPOTIFYTOOL_PROFILE"); p != "" {
+	if p := Env("PROFILE"); p != "" {
 		return p
 	}
 	return filepath.Join(c.DataDir, "taste-profile.md")
@@ -123,7 +140,7 @@ func (c Config) ProfilePath() string {
 
 // DigestDir is where weekly batch digests are written.
 func (c Config) DigestDir() string {
-	if p := os.Getenv("SPOTIFYTOOL_DIGEST_DIR"); p != "" {
+	if p := Env("DIGEST_DIR"); p != "" {
 		return p
 	}
 	return filepath.Join(c.DataDir, "digests")
@@ -149,41 +166,51 @@ func Load() Config {
 		TidalClientID:     strings.TrimSpace(os.Getenv("TIDAL_CLIENT_ID")),
 		TidalRefreshToken: strings.TrimSpace(os.Getenv("TIDAL_REFRESH_TOKEN")),
 		TidalCountry:      country,
-		TerminalURL:       strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TERMINAL_URL")),
-		TerminalURLHTTP:   strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TERMINAL_URL_HTTP")),
-		TriggerURL:        strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TRIGGER_URL")),
+		TerminalURL:       Env("TERMINAL_URL"),
+		TerminalURLHTTP:   Env("TERMINAL_URL_HTTP"),
+		TriggerURL:        Env("TRIGGER_URL"),
 		ConfigDir:         configDir(),
 		DataDir:           dataDir(),
 	}
 	return c
 }
 
+// legacyOrNew keeps an existing pre-rename "spotifytool" directory in use and
+// only names fresh directories "musictool".
+func legacyOrNew(base string) string {
+	legacy := filepath.Join(base, "spotifytool")
+	if _, err := os.Stat(legacy); err == nil {
+		return legacy
+	}
+	return filepath.Join(base, "musictool")
+}
+
 func configDir() string {
-	if d := os.Getenv("SPOTIFYTOOL_CONFIG_DIR"); d != "" {
+	if d := Env("CONFIG_DIR"); d != "" {
 		return d
 	}
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "spotifytool")
+		return legacyOrNew(xdg)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		return filepath.Join(".", ".spotifytool")
+		return filepath.Join(".", ".musictool")
 	}
-	return filepath.Join(home, ".config", "spotifytool")
+	return legacyOrNew(filepath.Join(home, ".config"))
 }
 
 func dataDir() string {
-	if d := os.Getenv("SPOTIFYTOOL_DATA_DIR"); d != "" {
+	if d := Env("DATA_DIR"); d != "" {
 		return d
 	}
 	if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
-		return filepath.Join(xdg, "spotifytool")
+		return legacyOrNew(xdg)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		return filepath.Join(".", ".spotifytool-data")
+		return filepath.Join(".", ".musictool-data")
 	}
-	return filepath.Join(home, ".local", "share", "spotifytool")
+	return legacyOrNew(filepath.Join(home, ".local", "share"))
 }
 
 // EnsureDirs creates the config and data directories (0700) if absent.

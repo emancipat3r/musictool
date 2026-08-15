@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/emancipat3r/spotifytool/internal/logx"
+	"github.com/emancipat3r/musictool/internal/logx"
 )
 
 // TermProxy is an auth-injecting reverse proxy in front of the Zellij web

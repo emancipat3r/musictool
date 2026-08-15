@@ -203,7 +203,7 @@ const pageTemplate = `<!doctype html>
 </head>
 <body>
 <header>
-  <div class="brand"><span class="dot"></span><h1>spotifytool</h1></div>
+  <div class="brand"><span class="dot"></span><h1>musictool</h1></div>
   <nav>
     <a class="nav-btn {{if eq .Page "dashboard"}}active{{end}}" href="/">Dashboard</a>
     <a class="nav-btn {{if eq .Page "profile"}}active{{end}}" href="/profile">Taste Profile</a>

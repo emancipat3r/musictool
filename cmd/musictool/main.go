@@ -1,4 +1,4 @@
-// Command spotifytool is the self-hosted junction between Claude's curation and
+// Command musictool is the self-hosted junction between Claude's curation and
 // Spotify's catalog: PKCE auth, library sync into SQLite, the deterministic
 // resolver, exact playlist builds with read-back verification, and an MCP +
 // dashboard server.
@@ -20,13 +20,13 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/emancipat3r/spotifytool/internal/apperr"
-	"github.com/emancipat3r/spotifytool/internal/auth"
-	"github.com/emancipat3r/spotifytool/internal/config"
-	"github.com/emancipat3r/spotifytool/internal/logx"
-	"github.com/emancipat3r/spotifytool/internal/model"
-	"github.com/emancipat3r/spotifytool/internal/profile"
-	"github.com/emancipat3r/spotifytool/internal/service"
+	"github.com/emancipat3r/musictool/internal/apperr"
+	"github.com/emancipat3r/musictool/internal/auth"
+	"github.com/emancipat3r/musictool/internal/config"
+	"github.com/emancipat3r/musictool/internal/logx"
+	"github.com/emancipat3r/musictool/internal/model"
+	"github.com/emancipat3r/musictool/internal/profile"
+	"github.com/emancipat3r/musictool/internal/service"
 )
 
 // version is overridable via -ldflags "-X main.version=...".
@@ -82,9 +82,9 @@ func run() int {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `spotifytool — self-hosted AI music curation junction
+	fmt.Fprint(os.Stderr, `musictool — self-hosted AI music curation junction
 
-usage: spotifytool <command> [flags]
+usage: musictool <command> [flags]
 
 commands:
   auth       one-time interactive Spotify authorization (PKCE + loopback/OOB)
@@ -100,9 +100,10 @@ data goes to stdout; logs to stderr. exit: 0 ok / 1 auth / 2 API / 3 partial
 `)
 }
 
-// envOr returns the environment value for key, or def if unset.
-func envOr(key, def string) string {
-	if v := os.Getenv(key); v != "" {
+// envc returns the MUSICTOOL_/legacy-SPOTIFYTOOL_ env value for suffix, or def
+// if neither is set.
+func envc(suffix, def string) string {
+	if v := config.Env(suffix); v != "" {
 		return v
 	}
 	return def
@@ -317,6 +318,6 @@ func cmdProfile(ctx context.Context, args []string) error {
 	case "edit":
 		return fmt.Errorf("edit the file directly at %s or via the dashboard /profile page", cfg.ProfilePath())
 	default:
-		return fmt.Errorf("usage: spotifytool profile [show|path|edit]")
+		return fmt.Errorf("usage: musictool profile [show|path|edit]")
 	}
 }

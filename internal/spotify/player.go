@@ -3,7 +3,7 @@ package spotify
 import (
 	"context"
 
-	"github.com/emancipat3r/spotifytool/internal/provider"
+	"github.com/emancipat3r/musictool/internal/provider"
 )
 
 // CurrentlyPlaying returns the current player snapshot, or nil when nothing is

@@ -24,10 +24,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/emancipat3r/spotifytool/internal/apperr"
-	"github.com/emancipat3r/spotifytool/internal/config"
-	"github.com/emancipat3r/spotifytool/internal/logx"
-	"github.com/emancipat3r/spotifytool/internal/provider"
+	"github.com/emancipat3r/musictool/internal/apperr"
+	"github.com/emancipat3r/musictool/internal/config"
+	"github.com/emancipat3r/musictool/internal/logx"
+	"github.com/emancipat3r/musictool/internal/provider"
 )
 
 const jsonAPIType = "application/vnd.api+json"
@@ -183,7 +183,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 
 		defer res.Body.Close()
 		if res.StatusCode == http.StatusUnauthorized {
-			return apperr.Auth(fmt.Errorf("401 from TIDAL; token invalid — run `spotifytool auth` with MUSIC_PROVIDER=tidal"))
+			return apperr.Auth(fmt.Errorf("401 from TIDAL; token invalid — run `musictool auth` with MUSIC_PROVIDER=tidal"))
 		}
 		if res.StatusCode >= 400 {
 			return apperr.API(decodeAPIError(res))

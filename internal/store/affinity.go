@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/emancipat3r/spotifytool/internal/model"
+	"github.com/emancipat3r/musictool/internal/model"
 )
 
 // Evidence-weighted affinity model. Design follows the implicit-feedback

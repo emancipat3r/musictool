@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/emancipat3r/spotifytool/internal/model"
+	"github.com/emancipat3r/musictool/internal/model"
 )
 
 // CreatePlaylist creates an empty playlist for the current user and returns it.

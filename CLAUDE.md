@@ -1,4 +1,4 @@
-# spotifytool — workflow for curation sessions
+# musictool — workflow for curation sessions
 
 This file documents the *workflow*. Tool mechanics (arguments, schemas) are in
 the MCP manifest — call `tools/list` or read the tool descriptions. Your job is
@@ -133,7 +133,7 @@ do not need the taste profile.
 
 ## Data hygiene
 
-- Only spotifytool writes SQLite (you reach it via MCP tools; the dashboard
+- Only musictool writes SQLite (you reach it via MCP tools; the dashboard
   reads through the same engine). Don't try to touch the DB directly.
 - `sync_library` refreshes liked songs, playlists, plays (append-only), and
   Keepers. Cron runs an hourly sync already; call it manually only when you need

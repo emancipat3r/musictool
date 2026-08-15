@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/emancipat3r/spotifytool/internal/model"
+	"github.com/emancipat3r/musictool/internal/model"
 )
 
 // parseTime parses an ISO-8601 timestamp, tolerating both second and

@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/emancipat3r/spotifytool/internal/config"
-	"github.com/emancipat3r/spotifytool/internal/logx"
-	"github.com/emancipat3r/spotifytool/internal/profile"
-	"github.com/emancipat3r/spotifytool/internal/service"
-	"github.com/emancipat3r/spotifytool/internal/store"
+	"github.com/emancipat3r/musictool/internal/config"
+	"github.com/emancipat3r/musictool/internal/logx"
+	"github.com/emancipat3r/musictool/internal/profile"
+	"github.com/emancipat3r/musictool/internal/service"
+	"github.com/emancipat3r/musictool/internal/store"
 )
 
 // Dashboard serves the read-only UI.

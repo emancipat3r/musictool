@@ -9,7 +9,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/emancipat3r/spotifytool/internal/model"
+	"github.com/emancipat3r/musictool/internal/model"
 )
 
 // ErrNotSupported is returned by optional endpoints a provider does not offer

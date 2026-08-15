@@ -1,7 +1,7 @@
-# spotifytool
+# musictool
 
 Self-hosted, LAN-only AI music curation stack. Claude curates, your streaming
-provider plays, playlists are the persistence layer between them. `spotifytool`
+provider plays, playlists are the persistence layer between them. `musictool`
 is the junction: a single static Go binary that does PKCE auth, syncs the
 library into SQLite, resolves curated picks into exact track URIs
 deterministically, builds and verifies playlists, and serves both an MCP tool
@@ -12,12 +12,18 @@ Two providers are supported behind one interface: **Spotify** (default) and
 `MUSIC_PROVIDER`; the store is stamped with the provider and refuses to open
 under the other.
 
+> **Formerly `spotifytool`.** Renamed when the engine went multi-provider.
+> Pre-rename deployments keep working without changes: legacy `SPOTIFYTOOL_*`
+> environment variables are read as fallbacks for the `MUSICTOOL_*` names, and
+> existing `spotifytool` config/data directories and `spotifytool.db` stay in
+> use wherever they already exist.
+
 ## What it is
 
 - **Claude** is the taste engine (curation, discovery, taste-profile upkeep).
 - **The provider** (Spotify or TIDAL) is the media catalog and player.
 - **Playlists** are the interface contract between them.
-- **spotifytool** is the deterministic translator plus the store of listening
+- **musictool** is the deterministic translator plus the store of listening
   metrics the provider APIs do not expose.
 
 The providers' own generative playlist engines and connectors are deliberately
@@ -64,7 +70,7 @@ Two containers, one shared volume, LAN-only (reached via Tailscale):
 
 - **Container 1, `sandbox`**: Claude Code inside a named Zellij session, exposed
   to the browser via Zellij's built-in web client. This is the chat interface.
-- **Container 2, `spotify`**: `spotifytool serve` (MCP over Streamable HTTP on
+- **Container 2, `spotify`**: `musictool serve` (MCP over Streamable HTTP on
   the compose network) plus the read-only dashboard. Cron runs the hourly sync.
   Pure Go, no model invocations: all Claude usage lives in container 1's
   interactive session on the Max subscription.
@@ -74,7 +80,7 @@ Nothing is published to the public internet. See `deploy/docker-compose.yml`.
 ## Project layout
 
 ```
-cmd/spotifytool/        CLI entrypoint + serve command
+cmd/musictool/        CLI entrypoint + serve command
 internal/
   auth/                 PKCE, loopback + OOB flows, token cache with rotation
                         (provider-parameterized endpoints)
@@ -109,11 +115,11 @@ app for it (both are free, self-service registrations).
    ```sh
    make build
    export SPOTIFY_CLIENT_ID=<your-client-id>
-   ./bin/spotifytool auth                       # opens a browser, one-shot loopback
+   ./bin/musictool auth                       # opens a browser, one-shot loopback
    # headless machine? use the out-of-band flow:
-   ./bin/spotifytool auth --no-listener
+   ./bin/musictool auth --no-listener
    # capture the refresh token for the container:
-   ./bin/spotifytool auth --print-refresh-token
+   ./bin/musictool auth --print-refresh-token
    ```
 
 ### Option B: TIDAL
@@ -130,8 +136,8 @@ app for it (both are free, self-service registrations).
    make build
    export MUSIC_PROVIDER=tidal
    export TIDAL_CLIENT_ID=<your-client-id>
-   ./bin/spotifytool auth                       # same flow, TIDAL login page
-   ./bin/spotifytool auth --print-refresh-token # for the container
+   ./bin/musictool auth                       # same flow, TIDAL login page
+   ./bin/musictool auth --print-refresh-token # for the container
    ```
 
 Every command below respects `MUSIC_PROVIDER`; with it exported once, the rest
@@ -141,9 +147,9 @@ of the workflow is identical on either provider.
 
 3. **Sync and inspect.**
    ```sh
-   ./bin/spotifytool sync           # liked songs, playlists, plays*, Keepers
-   ./bin/spotifytool stats          # distilled library stats (JSON)
-   ./bin/spotifytool signals        # recent feedback since last batch (JSON)
+   ./bin/musictool sync           # liked songs, playlists, plays*, Keepers
+   ./bin/musictool stats          # distilled library stats (JSON)
+   ./bin/musictool signals        # recent feedback since last batch (JSON)
    ```
    *Play-history and telemetry stages skip themselves on TIDAL (see the
    capability matrix).
@@ -152,7 +158,7 @@ of the workflow is identical on either provider.
    ```sh
    echo '[{"artist":"Sublime","title":"Santeria"},
           {"artist":"Stick Figure","title":"Smoke Stack"}]' \
-     | ./bin/spotifytool build --name "Test Build" --desc "resolver check"
+     | ./bin/musictool build --name "Test Build" --desc "resolver check"
    ```
    The result includes the read-back so you can diff intent vs result. Picks
    may carry an optional `duration_ms`; candidates within 3 seconds of it get a
@@ -160,8 +166,8 @@ of the workflow is identical on either provider.
 
 5. **Run the server** (MCP + dashboard):
    ```sh
-   ./bin/spotifytool serve          # MCP :8080/mcp, dashboard :8081, and (when
-                                    # SPOTIFYTOOL_ZELLIJ_UPSTREAM is set) an
+   ./bin/musictool serve          # MCP :8080/mcp, dashboard :8081, and (when
+                                    # MUSICTOOL_ZELLIJ_UPSTREAM is set) an
                                     # auth-injecting zellij terminal proxy :8083
    ```
 
@@ -204,7 +210,7 @@ CLAUDE.md and any saved prompts.)
 
 - PKCE only, no client secrets. Token caches are `0600` (one per provider),
   never logged or committed.
-- Only spotifytool writes SQLite. The dashboard is read-only except the taste
+- Only musictool writes SQLite. The dashboard is read-only except the taste
   profile editor and the vote buttons (which write to the real Keepers/Disliked
   playlists — the provider stays the source of truth).
 - All binds are compose-network or LAN. Tailscale is the sole remote path. No

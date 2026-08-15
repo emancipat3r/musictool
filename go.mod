@@ -1,4 +1,4 @@
-module github.com/emancipat3r/spotifytool
+module github.com/emancipat3r/musictool
 
 go 1.26
 

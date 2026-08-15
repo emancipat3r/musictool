@@ -14,7 +14,7 @@ import (
 
 	_ "modernc.org/sqlite" // pure-Go driver, preserves CGO_ENABLED=0
 
-	"github.com/emancipat3r/spotifytool/internal/model"
+	"github.com/emancipat3r/musictool/internal/model"
 )
 
 // Store wraps the database handle.

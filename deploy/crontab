@@ -1,4 +1,4 @@
-# spotifytool cron (container 2). Times are container-local; set TZ in compose.
+# musictool cron (container 2). Times are container-local; set TZ in compose.
 #
 # Hourly: pure-Go library sync (zero model cost) — appends play history so
 # repeat behavior accumulates over time.
@@ -6,8 +6,8 @@
 # There is deliberately NO model-invoking cron here. All Claude usage happens in
 # the interactive session (container 1), billed to the Max subscription: run
 # /discovery-batch there for the weekly batch.
-0 * * * * spotifytool sync >/dev/null 2>>/data/sync.log
+0 * * * * musictool sync >/dev/null 2>>/data/sync.log
 
 # Daily deep sync (04:30): refreshes every owned playlist's track membership.
 # Unreadable playlists are logged and skipped, never fatal.
-30 4 * * * spotifytool sync --full >/dev/null 2>>/data/sync.log
+30 4 * * * musictool sync --full >/dev/null 2>>/data/sync.log

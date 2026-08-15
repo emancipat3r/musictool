@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/emancipat3r/spotifytool/internal/model"
+	"github.com/emancipat3r/musictool/internal/model"
 )
 
 // TrackRef is a compact track reference for summary outputs (guardrail: never

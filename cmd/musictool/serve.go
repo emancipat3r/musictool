@@ -11,12 +11,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/emancipat3r/spotifytool/internal/config"
-	"github.com/emancipat3r/spotifytool/internal/dashboard"
-	"github.com/emancipat3r/spotifytool/internal/logx"
-	"github.com/emancipat3r/spotifytool/internal/mcp"
-	"github.com/emancipat3r/spotifytool/internal/profile"
-	"github.com/emancipat3r/spotifytool/internal/service"
+	"github.com/emancipat3r/musictool/internal/config"
+	"github.com/emancipat3r/musictool/internal/dashboard"
+	"github.com/emancipat3r/musictool/internal/logx"
+	"github.com/emancipat3r/musictool/internal/mcp"
+	"github.com/emancipat3r/musictool/internal/profile"
+	"github.com/emancipat3r/musictool/internal/service"
 )
 
 // cmdServe runs the MCP server (Streamable HTTP) and the read-only dashboard,
@@ -27,13 +27,13 @@ import (
 // Absolute rule in serve: no writes to stdout. All diagnostics go to stderr.
 func cmdServe(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	mcpAddr := fs.String("mcp-addr", envOr("SPOTIFYTOOL_MCP_ADDR", ":8080"), "MCP listen address")
-	dashAddr := fs.String("dash-addr", envOr("SPOTIFYTOOL_DASH_ADDR", ":8081"), "dashboard listen address")
-	termAddr := fs.String("term-addr", envOr("SPOTIFYTOOL_TERMPROXY_ADDR", ":8083"), "terminal proxy listen address")
-	zellijUpstream := fs.String("zellij-upstream", envOr("SPOTIFYTOOL_ZELLIJ_UPSTREAM", ""),
+	mcpAddr := fs.String("mcp-addr", envc("MCP_ADDR", ":8080"), "MCP listen address")
+	dashAddr := fs.String("dash-addr", envc("DASH_ADDR", ":8081"), "dashboard listen address")
+	termAddr := fs.String("term-addr", envc("TERMPROXY_ADDR", ":8083"), "terminal proxy listen address")
+	zellijUpstream := fs.String("zellij-upstream", envc("ZELLIJ_UPSTREAM", ""),
 		"zellij web URL to auth-proxy (e.g. https://sandbox:8082); empty disables the terminal proxy")
-	tlsCert := fs.String("tls-cert", envOr("SPOTIFYTOOL_TLS_CERT", ""), "TLS cert for dashboard + terminal proxy (empty = plain HTTP)")
-	tlsKey := fs.String("tls-key", envOr("SPOTIFYTOOL_TLS_KEY", ""), "TLS key for dashboard + terminal proxy")
+	tlsCert := fs.String("tls-cert", envc("TLS_CERT", ""), "TLS cert for dashboard + terminal proxy (empty = plain HTTP)")
+	tlsKey := fs.String("tls-key", envc("TLS_KEY", ""), "TLS key for dashboard + terminal proxy")
 	noDash := fs.Bool("no-dashboard", false, "do not serve the dashboard")
 	noMCP := fs.Bool("no-mcp", false, "do not serve MCP")
 	verbose := fs.Bool("v", false, "verbose")
@@ -71,7 +71,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	if !*noMCP {
 		// MCP stays plain HTTP: it lives on the compose network only and the
 		// Claude Code client is configured for http://spotify:8080/mcp.
-		m := mcp.NewServer("spotifytool", version, mcp.Tools(svc))
+		m := mcp.NewServer("musictool", version, mcp.Tools(svc))
 		srv := &http.Server{Addr: *mcpAddr, Handler: m.Handler(), ReadHeaderTimeout: 10 * time.Second}
 		servers = append(servers, srv)
 		go serveHTTP(srv, "mcp", *mcpAddr+"/mcp", "", "")
@@ -91,7 +91,7 @@ func cmdServe(ctx context.Context, args []string) error {
 		// this listener instead (no TLS anywhere in its path). Browsers keep
 		// the TLS listener for clipboard (secure-context) support.
 		if *tlsCert != "" {
-			httpAddr := envOr("SPOTIFYTOOL_DASH_HTTP_ADDR", ":8085")
+			httpAddr := envc("DASH_HTTP_ADDR", ":8085")
 			if httpAddr != "off" {
 				srv2 := &http.Server{Addr: httpAddr, Handler: d.Handler(), ReadHeaderTimeout: 10 * time.Second}
 				servers = append(servers, srv2)
@@ -106,13 +106,13 @@ func cmdServe(ctx context.Context, args []string) error {
 			return err
 		}
 		// Deep-link into the claude session; "/" never shows the picker.
-		tp.SetSession(envOr("SPOTIFYTOOL_ZELLIJ_SESSION", "claude"))
+		tp.SetSession(envc("ZELLIJ_SESSION", "claude"))
 		// No ReadHeaderTimeout here: long-lived terminal WebSockets.
 		srv := &http.Server{Addr: *termAddr, Handler: tp}
 		servers = append(servers, srv)
 		go serveHTTP(srv, "terminal proxy", *termAddr, *tlsCert, *tlsKey)
 		if *tlsCert != "" {
-			httpAddr := envOr("SPOTIFYTOOL_TERM_HTTP_ADDR", ":8084")
+			httpAddr := envc("TERM_HTTP_ADDR", ":8084")
 			if httpAddr != "off" {
 				srv2 := &http.Server{Addr: httpAddr, Handler: tp}
 				servers = append(servers, srv2)

@@ -2,7 +2,7 @@
 description: Run the weekly discovery batch interactively (subscription-billed)
 ---
 
-Run the weekly discovery batch for spotifytool. This replaces the old unattended
+Run the weekly discovery batch for musictool. This replaces the old unattended
 cron batch; it runs here in the interactive session so it bills the Max
 subscription, never the API or Agent SDK credit. Work end to end; only pause if
 a resolution is ambiguous and you need a pick confirmed.

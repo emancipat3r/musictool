@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/emancipat3r/spotifytool/internal/model"
-	"github.com/emancipat3r/spotifytool/internal/provider"
+	"github.com/emancipat3r/musictool/internal/model"
+	"github.com/emancipat3r/musictool/internal/provider"
 )
 
 type userAttrs struct {

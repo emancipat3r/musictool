@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/emancipat3r/spotifytool/internal/model"
+	"github.com/emancipat3r/musictool/internal/model"
 )
 
 func openTemp(t *testing.T) *Store {

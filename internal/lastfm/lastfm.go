@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/emancipat3r/spotifytool/internal/apperr"
+	"github.com/emancipat3r/musictool/internal/apperr"
 )
 
 const apiBase = "https://ws.audioscrobbler.com/2.0/"

@@ -1,8 +1,8 @@
-# spotifytool — single static binary, cross-compiled for the homelab.
+# musictool — single static binary, cross-compiled for the homelab.
 # CGO_ENABLED=0 is mandatory: the pure-Go SQLite driver keeps the binary static.
 
-BINARY      := spotifytool
-PKG         := ./cmd/spotifytool
+BINARY      := musictool
+PKG         := ./cmd/musictool
 VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS     := -s -w -X main.version=$(VERSION)
 GO          := go
