@@ -16,9 +16,11 @@ import (
 	"github.com/emancipat3r/spotifytool/internal/config"
 	"github.com/emancipat3r/spotifytool/internal/lastfm"
 	"github.com/emancipat3r/spotifytool/internal/logx"
+	"github.com/emancipat3r/spotifytool/internal/provider"
 	"github.com/emancipat3r/spotifytool/internal/resolve"
 	"github.com/emancipat3r/spotifytool/internal/spotify"
 	"github.com/emancipat3r/spotifytool/internal/store"
+	"github.com/emancipat3r/spotifytool/internal/tidal"
 )
 
 // KeepersPlaylistName is the conventional explicit-positive vote channel.
@@ -29,30 +31,53 @@ const KeepersPlaylistName = "Keepers"
 // wrong, and the engine refuses to re-add them.
 const DislikedPlaylistName = "Disliked"
 
-// Service holds the wired-up engine.
+// Service holds the wired-up engine. SP is the provider abstraction — Spotify
+// or TIDAL, selected by MUSIC_PROVIDER; everything downstream is
+// provider-agnostic.
 type Service struct {
 	Cfg config.Config
-	SP  *spotify.Client
+	SP  provider.Client
 	DB  *store.Store
 	LF  *lastfm.Client
 	Res *resolve.Resolver
 }
 
-// New builds a Service: token source from cache or SPOTIFY_REFRESH_TOKEN, the
-// Spotify client, the store (single writer), Last.fm, and the resolver (backed
-// by the store's resolution cache).
+// New builds a Service: the provider client (token source from cache or the
+// env-seeded refresh token), the store (single writer), Last.fm, and the
+// resolver (backed by the store's resolution cache).
 func New(cfg config.Config) (*Service, error) {
 	if err := cfg.EnsureDirs(); err != nil {
 		return nil, err
 	}
-	ts := auth.NewTokenSource(cfg.ClientID, cfg.TokenPath(), cfg.RefreshToken, &http.Client{Timeout: 30 * time.Second})
-	sp := spotify.NewClient(ts)
+	hc := &http.Client{Timeout: 30 * time.Second}
+	var sp provider.Client
+	switch cfg.Provider {
+	case "", "spotify":
+		ts := auth.NewTokenSource(cfg.ClientID, config.TokenURL, cfg.TokenPath(), cfg.RefreshToken, hc)
+		sp = spotify.NewClient(ts)
+	case "tidal":
+		ts := auth.NewTokenSource(cfg.TidalClientID, config.TidalTokenURL, cfg.TokenPath(), cfg.TidalRefreshToken, hc)
+		sp = tidal.NewClient(ts, cfg.TidalCountry)
+	default:
+		return nil, fmt.Errorf("unknown MUSIC_PROVIDER %q (want spotify or tidal)", cfg.Provider)
+	}
 	db, err := store.Open(cfg.DBPath())
 	if err != nil {
 		return nil, err
 	}
+	// Provider stamp: one data dir belongs to one provider. Track ids, URIs,
+	// and the resolver cache are provider-scoped; mixing them would corrupt
+	// every signal, so a mismatched open is refused outright.
+	ctx := context.Background()
+	if prev, ok := db.GetMeta(ctx, "provider"); ok && prev != "" && prev != sp.Name() {
+		db.Close()
+		return nil, fmt.Errorf("data dir %s belongs to provider %q; set MUSIC_PROVIDER=%s or point SPOTIFYTOOL_DATA_DIR at a fresh directory",
+			cfg.DataDir, prev, prev)
+	} else if !ok || prev == "" {
+		_ = db.SetMeta(ctx, "provider", sp.Name())
+	}
 	lf := lastfm.New(cfg.LastFMKey)
-	res := resolve.New(sp, db)
+	res := resolve.New(sp, db, sp.Name())
 	return &Service{Cfg: cfg, SP: sp, DB: db, LF: lf, Res: res}, nil
 }
 
@@ -122,16 +147,20 @@ func (s *Service) Sync(ctx context.Context, full bool) (SyncResult, error) {
 	}
 	res.Playlists = len(pls)
 
-	logx.Infof("sync: fetching recently played…")
-	plays, err := s.SP.RecentlyPlayed(ctx)
-	if err != nil {
-		return fail(err)
+	if s.SP.Capabilities().PlayHistory {
+		logx.Infof("sync: fetching recently played…")
+		plays, err := s.SP.RecentlyPlayed(ctx)
+		if err != nil {
+			return fail(err)
+		}
+		added, err := s.DB.AppendPlays(ctx, plays)
+		if err != nil {
+			return fail(err)
+		}
+		res.NewPlays = added
+	} else {
+		logx.Infof("sync: %s exposes no play history; skipping (explicit signals still sync)", s.SP.Name())
 	}
-	added, err := s.DB.AppendPlays(ctx, plays)
-	if err != nil {
-		return fail(err)
-	}
-	res.NewPlays = added
 
 	// Record the current user id so name-scoped operations and owned-only
 	// filtering work. Non-fatal on failure.

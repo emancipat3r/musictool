@@ -53,6 +53,10 @@ type listenState struct {
 // goroutine from serve. Missing scope (403) backs off to a slow retry so a
 // pre-rescope token does not spam the API or the logs.
 func (s *Service) StartListenPoller(ctx context.Context, interval time.Duration) {
+	if !s.SP.Capabilities().ListenTelemetry {
+		logx.Infof("listen poller: %s exposes no player state; telemetry disabled (explicit votes and saves still count)", s.SP.Name())
+		return
+	}
 	if interval <= 0 {
 		interval = 20 * time.Second
 	}

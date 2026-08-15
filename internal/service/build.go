@@ -86,7 +86,7 @@ func (s *Service) BuildExact(ctx context.Context, opts BuildOptions) (*BuildResu
 				liveCount = len(uris)
 			}
 			res.PlaylistID = existing.ID
-			res.PlaylistURI = "spotify:playlist:" + existing.ID
+			res.PlaylistURI = s.SP.PlaylistURI(existing.ID)
 			res.Created = false
 			res.Reason = "name_exists"
 			res.Note = fmt.Sprintf("a playlist named %q already exists (%d tracks); nothing was created. This is a no-op, not a failure. Use add_to_playlist_exact to extend it, or set allow_duplicate to force a twin.",
@@ -127,7 +127,7 @@ func (s *Service) BuildExact(ctx context.Context, opts BuildOptions) (*BuildResu
 		return nil, err
 	}
 	res.PlaylistID = pl.ID
-	res.PlaylistURI = "spotify:playlist:" + pl.ID
+	res.PlaylistURI = s.SP.PlaylistURI(pl.ID)
 
 	if len(accepted) > 0 {
 		if err := s.SP.AddTracks(ctx, pl.ID, accepted); err != nil {
@@ -181,7 +181,7 @@ func (s *Service) AppendExact(ctx context.Context, playlistRef string, queries [
 	if err != nil {
 		return nil, err
 	}
-	res := &BuildResult{Name: pl.Name, PlaylistID: pl.ID, PlaylistURI: "spotify:playlist:" + pl.ID, Requested: len(queries)}
+	res := &BuildResult{Name: pl.Name, PlaylistID: pl.ID, PlaylistURI: s.SP.PlaylistURI(pl.ID), Requested: len(queries)}
 
 	resolutions, err := s.Res.ResolveList(ctx, queries)
 	if err != nil {
@@ -331,9 +331,9 @@ func (s *Service) Vote(ctx context.Context, uri, action string) (map[string]any,
 	if action != "keeper" && action != "dislike" {
 		return nil, fmt.Errorf("action must be keeper or dislike")
 	}
-	trackID := strings.TrimPrefix(uri, "spotify:track:")
-	if trackID == uri || trackID == "" {
-		return nil, fmt.Errorf("uri must be a spotify:track: URI")
+	trackID, ok := s.SP.TrackID(uri)
+	if !ok {
+		return nil, fmt.Errorf("uri must be a %s track URI", s.SP.Name())
 	}
 	target, opposite := KeepersPlaylistName, DislikedPlaylistName
 	if action == "dislike" {

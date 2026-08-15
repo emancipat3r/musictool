@@ -111,6 +111,7 @@ func (c *Client) RecentlyPlayed(ctx context.Context) ([]model.PlayEvent, error) 
 	for _, it := range page.Items {
 		out = append(out, model.PlayEvent{
 			TrackID:  it.Track.ID,
+			URI:      it.Track.URI,
 			PlayedAt: parseTime(it.PlayedAt),
 			Title:    it.Track.Name,
 			Artist:   it.Track.toModel().ArtistName(),

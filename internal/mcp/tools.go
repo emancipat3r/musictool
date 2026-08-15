@@ -8,7 +8,6 @@ import (
 
 	"github.com/emancipat3r/spotifytool/internal/model"
 	"github.com/emancipat3r/spotifytool/internal/service"
-	"github.com/emancipat3r/spotifytool/internal/spotify"
 	"github.com/emancipat3r/spotifytool/internal/store"
 )
 
@@ -146,7 +145,7 @@ func Tools(svc *service.Service) []Tool {
 		},
 		{
 			Name:        "search_tracks",
-			Description: "Search Spotify with field filters (artist/title/album), never free text. Returns compact candidate tracks.",
+			Description: "Search the music provider's catalog with structured fields (artist/title/album; preferred — each provider builds its best native query) or a raw query. Returns compact candidate tracks.",
 			InputSchema: obj(map[string]any{
 				"artist": strProp("artist filter"),
 				"title":  strProp("title filter"),
@@ -160,14 +159,13 @@ func Tools(svc *service.Service) []Tool {
 					Limit                       int
 				}
 				_ = json.Unmarshal(args, &a)
-				q := a.Query
 				if a.Artist != "" || a.Title != "" || a.Album != "" {
-					q = spotify.FieldQuery(a.Artist, a.Title, a.Album)
+					return svc.SP.SearchPick(ctx, a.Artist, a.Title, a.Album, a.Limit)
 				}
-				if strings.TrimSpace(q) == "" {
+				if strings.TrimSpace(a.Query) == "" {
 					return nil, errors.New("provide artist/title (preferred) or query")
 				}
-				return svc.SP.SearchTracks(ctx, q, a.Limit)
+				return svc.SP.SearchTracks(ctx, a.Query, a.Limit)
 			},
 		},
 		{
@@ -231,7 +229,7 @@ func Tools(svc *service.Service) []Tool {
 			InputSchema: obj(map[string]any{
 				"playlist": strProp("playlist id or exact name"),
 				"tracks":   map[string]any{"type": "array", "items": trackQuerySchema, "description": "picks to match against playlist contents"},
-				"uris":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "explicit spotify:track: URIs to remove"},
+				"uris":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "explicit track URIs to remove (provider-scoped, e.g. spotify:track:… / tidal:track:…)"},
 			}, "playlist"),
 			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
 				var a struct {

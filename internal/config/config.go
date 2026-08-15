@@ -27,6 +27,12 @@ const (
 	AuthorizeURL = "https://accounts.spotify.com/authorize"
 	TokenURL     = "https://accounts.spotify.com/api/token"
 	APIBase      = "https://api.spotify.com/v1"
+
+	// TIDAL OAuth + API base URLs (openapi.tidal.com, JSON:API). Same
+	// Authorization Code + PKCE flow; live-verified 2026-08-14.
+	TidalAuthorizeURL = "https://login.tidal.com/authorize"
+	TidalTokenURL     = "https://auth.tidal.com/v1/oauth2/token"
+	TidalAPIBase      = "https://openapi.tidal.com/v2"
 )
 
 // Scopes is the exact set the PRD requires: read the library and recent/top
@@ -44,12 +50,33 @@ var Scopes = []string{
 	"user-read-currently-playing",
 }
 
+// TidalScopes is the TIDAL equivalent. These five must be ENABLED on the app
+// in the TIDAL developer dashboard or the authorize step fails. TIDAL has no
+// telemetry or playback-history scopes — that whole channel does not exist in
+// its third-party API.
+var TidalScopes = []string{
+	"playlists.read",
+	"playlists.write",
+	"search.read",
+	"collection.read",
+	"user.read",
+}
+
 // Config is the resolved runtime configuration. Secrets (client id, refresh
 // token, last.fm key) live only in memory here, never on stdout.
 type Config struct {
-	ClientID     string // SPOTIFY_CLIENT_ID (public, required)
+	// Provider selects the music backend: "spotify" (default) or "tidal"
+	// (MUSIC_PROVIDER). One provider per deployment; the store stamps it and
+	// refuses to open under the other.
+	Provider string
+
+	ClientID     string // SPOTIFY_CLIENT_ID (public, required for spotify)
 	RefreshToken string // SPOTIFY_REFRESH_TOKEN (optional headless bootstrap)
 	LastFMKey    string // LASTFM_API_KEY (optional, discovery seeds)
+
+	TidalClientID     string // TIDAL_CLIENT_ID (public, required for tidal)
+	TidalRefreshToken string // TIDAL_REFRESH_TOKEN (optional headless bootstrap)
+	TidalCountry      string // TIDAL_COUNTRY (ISO 3166-1 alpha-2, default US)
 
 	// TerminalURL is the Zellij web client address (SPOTIFYTOOL_TERMINAL_URL),
 	// e.g. https://homelab.tailnet-name.ts.net:8082. When set, the dashboard
@@ -72,8 +99,15 @@ type Config struct {
 	DataDir   string // holds the SQLite db, taste profile, digests
 }
 
-// TokenPath is the 0600 token cache location.
-func (c Config) TokenPath() string { return filepath.Join(c.ConfigDir, "token.json") }
+// TokenPath is the 0600 token cache location, per provider so switching
+// MUSIC_PROVIDER never reads the other provider's tokens. Spotify keeps the
+// historical token.json name.
+func (c Config) TokenPath() string {
+	if c.Provider == "tidal" {
+		return filepath.Join(c.ConfigDir, "token-tidal.json")
+	}
+	return filepath.Join(c.ConfigDir, "token.json")
+}
 
 // DBPath is the SQLite database file.
 func (c Config) DBPath() string { return filepath.Join(c.DataDir, "spotifytool.db") }
@@ -99,15 +133,27 @@ func (c Config) DigestDir() string {
 // secrets — subcommands validate what they actually need (e.g. serve requires a
 // usable token, auth requires only the client id).
 func Load() Config {
+	prov := strings.ToLower(strings.TrimSpace(os.Getenv("MUSIC_PROVIDER")))
+	if prov == "" {
+		prov = "spotify"
+	}
+	country := strings.ToUpper(strings.TrimSpace(os.Getenv("TIDAL_COUNTRY")))
+	if country == "" {
+		country = "US"
+	}
 	c := Config{
-		ClientID:        strings.TrimSpace(os.Getenv("SPOTIFY_CLIENT_ID")),
-		RefreshToken:    strings.TrimSpace(os.Getenv("SPOTIFY_REFRESH_TOKEN")),
-		LastFMKey:       strings.TrimSpace(os.Getenv("LASTFM_API_KEY")),
-		TerminalURL:     strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TERMINAL_URL")),
-		TerminalURLHTTP: strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TERMINAL_URL_HTTP")),
-		TriggerURL:      strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TRIGGER_URL")),
-		ConfigDir:       configDir(),
-		DataDir:         dataDir(),
+		Provider:          prov,
+		ClientID:          strings.TrimSpace(os.Getenv("SPOTIFY_CLIENT_ID")),
+		RefreshToken:      strings.TrimSpace(os.Getenv("SPOTIFY_REFRESH_TOKEN")),
+		LastFMKey:         strings.TrimSpace(os.Getenv("LASTFM_API_KEY")),
+		TidalClientID:     strings.TrimSpace(os.Getenv("TIDAL_CLIENT_ID")),
+		TidalRefreshToken: strings.TrimSpace(os.Getenv("TIDAL_REFRESH_TOKEN")),
+		TidalCountry:      country,
+		TerminalURL:       strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TERMINAL_URL")),
+		TerminalURLHTTP:   strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TERMINAL_URL_HTTP")),
+		TriggerURL:        strings.TrimSpace(os.Getenv("SPOTIFYTOOL_TRIGGER_URL")),
+		ConfigDir:         configDir(),
+		DataDir:           dataDir(),
 	}
 	return c
 }

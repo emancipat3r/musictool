@@ -399,7 +399,7 @@ const pageTemplate = `<!doctype html>
       fetch('/vote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uri: 'spotify:track:' + tile.dataset.track, action: action })
+        body: JSON.stringify({ uri: {{.TrackURIPrefix}} + tile.dataset.track, action: action })
       }).then(function (r) { return r.json(); }).then(function (res) {
         btn.disabled = false;
         if (!res.ok) { alert(res.error || 'vote failed'); return; }

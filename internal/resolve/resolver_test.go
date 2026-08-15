@@ -251,7 +251,7 @@ func TestScoreCanonicalBeatsSoundtrack(t *testing.T) {
 // Stress test F6: one malformed pick costs that row, never the batch.
 func TestResolveListSurvivesInvalidPick(t *testing.T) {
 	s := stubSearcher{tracks: []model.Track{trk("spotify:track:ok", "Santeria", "Sublime", 0)}}
-	r := New(s, nil)
+	r := New(s, nil, "spotify")
 	out, err := r.ResolveList(context.Background(), []model.TrackQuery{
 		{Artist: "Sublime", Title: "Santeria"},
 		{Artist: "", Title: ""},
@@ -278,7 +278,7 @@ func TestCacheHollowAndUnknownBucketAreMisses(t *testing.T) {
 	q := model.TrackQuery{Artist: "Sublime", Title: "Santeria"}
 
 	hollow := &memCache{track: model.Track{URI: "spotify:track:stale"}, bucket: "exact"}
-	res, err := New(s, hollow).Resolve(context.Background(), q)
+	res, err := New(s, hollow, "spotify").Resolve(context.Background(), q)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +287,7 @@ func TestCacheHollowAndUnknownBucketAreMisses(t *testing.T) {
 	}
 
 	unknown := &memCache{track: trk("spotify:track:amb", "Santeria", "Sublime", 0), bucket: "ambiguous"}
-	res2, err := New(s, unknown).Resolve(context.Background(), q)
+	res2, err := New(s, unknown, "spotify").Resolve(context.Background(), q)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,19 +349,24 @@ func TestSameAlbumMasteringsCollapse(t *testing.T) {
 func TestCacheKeyIncludesDuration(t *testing.T) {
 	base := model.TrackQuery{Artist: "Sublime", Title: "Santeria"}
 	pinned := model.TrackQuery{Artist: "Sublime", Title: "Santeria", DurationMs: 999_000}
-	if cacheKey(base) == cacheKey(pinned) {
+	if cacheKey("spotify", base) == cacheKey("spotify", pinned) {
 		t.Fatal("duration_ms must be part of the cache key")
 	}
 	albumPinned := model.TrackQuery{Artist: "Sublime", Title: "Santeria", Album: "Sublime"}
-	if cacheKey(base) == cacheKey(albumPinned) {
+	if cacheKey("spotify", base) == cacheKey("spotify", albumPinned) {
 		t.Fatal("album must be part of the cache key")
+	}
+	// Provider must namespace the key: a spotify URI cached for a query can
+	// never replay under a tidal deployment.
+	if cacheKey("spotify", base) == cacheKey("tidal", base) {
+		t.Fatal("provider must be part of the cache key")
 	}
 }
 
 // stubSearcher lets us exercise Resolve end-to-end without network.
 type stubSearcher struct{ tracks []model.Track }
 
-func (s stubSearcher) SearchTracks(_ context.Context, _ string, _ int) ([]model.Track, error) {
+func (s stubSearcher) SearchPick(_ context.Context, _, _, _ string, _ int) ([]model.Track, error) {
 	return s.tracks, nil
 }
 
@@ -388,7 +393,7 @@ func TestResolveCachePreservesBucket(t *testing.T) {
 	// silently-upgraded exact.
 	s := stubSearcher{tracks: []model.Track{trk("spotify:track:cov", "Santeria", "Some Cover Band", 30)}}
 	cache := &memCache{}
-	r := New(s, cache)
+	r := New(s, cache, "spotify")
 	q := model.TrackQuery{Artist: "Sublime", Title: "Santeria"}
 
 	first, err := r.Resolve(context.Background(), q)
@@ -450,7 +455,7 @@ func TestAmbiguousOptionsDedupeByISRC(t *testing.T) {
 
 func TestResolveUsesCacheDeterministically(t *testing.T) {
 	s := stubSearcher{tracks: []model.Track{trk("spotify:track:aaa", "Santeria", "Sublime", 80)}}
-	r := New(s, nil)
+	r := New(s, nil, "spotify")
 	q := model.TrackQuery{Artist: "Sublime", Title: "Santeria"}
 	a, err := r.Resolve(context.Background(), q)
 	if err != nil {

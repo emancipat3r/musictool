@@ -126,8 +126,9 @@ func cmdAuth(ctx context.Context, args []string) error {
 	}
 	logx.Verbose = *verbose
 	cfg := config.Load()
-	if cfg.ClientID == "" {
-		return apperr.Auth(fmt.Errorf("SPOTIFY_CLIENT_ID is not set"))
+	ep := authEndpoints(cfg)
+	if ep.ClientID == "" {
+		return apperr.Auth(fmt.Errorf("%s is not set", ep.ClientIDEnv))
 	}
 	reader := bufio.NewReader(os.Stdin)
 	readCode := func(prompt string) (string, error) {
@@ -135,7 +136,7 @@ func cmdAuth(ctx context.Context, args []string) error {
 		line, err := reader.ReadString('\n')
 		return strings.TrimSpace(line), err
 	}
-	tok, err := auth.Run(ctx, cfg, auth.Options{
+	tok, err := auth.Run(ctx, ep, auth.Options{
 		NoListener: *noListener,
 		NoBrowser:  *noBrowser,
 	}, readCode)
@@ -144,10 +145,36 @@ func cmdAuth(ctx context.Context, args []string) error {
 	}
 	if *printRefresh {
 		// The only stdout write for auth: the app-scoped refresh token, so it
-		// can be injected as SPOTIFY_REFRESH_TOKEN into container 2.
+		// can be injected as SPOTIFY_REFRESH_TOKEN / TIDAL_REFRESH_TOKEN into
+		// container 2.
 		fmt.Println(tok.RefreshToken)
 	}
 	return nil
+}
+
+// authEndpoints maps the configured provider to its OAuth2 endpoints. Both
+// providers speak Authorization Code + PKCE with the same loopback redirect.
+func authEndpoints(cfg config.Config) auth.Endpoints {
+	if cfg.Provider == "tidal" {
+		return auth.Endpoints{
+			Provider:     "tidal",
+			ClientID:     cfg.TidalClientID,
+			ClientIDEnv:  "TIDAL_CLIENT_ID",
+			AuthorizeURL: config.TidalAuthorizeURL,
+			TokenURL:     config.TidalTokenURL,
+			Scopes:       config.TidalScopes,
+			TokenPath:    cfg.TokenPath(),
+		}
+	}
+	return auth.Endpoints{
+		Provider:     "spotify",
+		ClientID:     cfg.ClientID,
+		ClientIDEnv:  "SPOTIFY_CLIENT_ID",
+		AuthorizeURL: config.AuthorizeURL,
+		TokenURL:     config.TokenURL,
+		Scopes:       config.Scopes,
+		TokenPath:    cfg.TokenPath(),
+	}
 }
 
 func cmdSync(ctx context.Context, args []string) error {

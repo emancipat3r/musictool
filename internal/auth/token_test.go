@@ -64,7 +64,11 @@ func TestParsePasted(t *testing.T) {
 }
 
 func TestBuildAuthorizeURL(t *testing.T) {
-	got := buildAuthorizeURL("client123", "state456", "challenge789")
+	got := buildAuthorizeURL(Endpoints{
+		ClientID:     "client123",
+		AuthorizeURL: "https://accounts.spotify.com/authorize",
+		Scopes:       []string{"user-library-read"},
+	}, "state456", "challenge789")
 	u, err := url.Parse(got)
 	if err != nil {
 		t.Fatal(err)

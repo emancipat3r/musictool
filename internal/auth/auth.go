@@ -29,12 +29,25 @@ type Options struct {
 // codeReader reads the pasted redirect/code in OOB mode. Injectable for tests.
 type codeReader func(prompt string) (string, error)
 
+// Endpoints carries one provider's OAuth2 parameters. Both supported providers
+// speak Authorization Code + PKCE, so this is the only per-provider surface
+// the flow needs.
+type Endpoints struct {
+	Provider     string // "spotify" | "tidal", for messages
+	ClientID     string
+	ClientIDEnv  string // env var name to cite when ClientID is empty
+	AuthorizeURL string
+	TokenURL     string
+	Scopes       []string
+	TokenPath    string
+}
+
 // Run performs the one-time interactive Authorization Code + PKCE flow and
 // persists the token cache. It returns the resulting token so the caller can
 // optionally surface the refresh token for headless bootstrap.
-func Run(ctx context.Context, cfg config.Config, opts Options, readCode codeReader) (*Token, error) {
-	if cfg.ClientID == "" {
-		return nil, apperr.Auth(errors.New("SPOTIFY_CLIENT_ID is not set"))
+func Run(ctx context.Context, ep Endpoints, opts Options, readCode codeReader) (*Token, error) {
+	if ep.ClientID == "" {
+		return nil, apperr.Auth(fmt.Errorf("%s is not set", ep.ClientIDEnv))
 	}
 	pkce, err := NewPKCE()
 	if err != nil {
@@ -44,7 +57,7 @@ func Run(ctx context.Context, cfg config.Config, opts Options, readCode codeRead
 	if err != nil {
 		return nil, err
 	}
-	authURL := buildAuthorizeURL(cfg.ClientID, state, pkce.Challenge)
+	authURL := buildAuthorizeURL(ep, state, pkce.Challenge)
 
 	var code string
 	if opts.NoListener {
@@ -56,29 +69,29 @@ func Run(ctx context.Context, cfg config.Config, opts Options, readCode codeRead
 		return nil, err
 	}
 
-	tok, err := exchangeCode(ctx, cfg.ClientID, code, pkce.Verifier)
+	tok, err := exchangeCode(ctx, ep, code, pkce.Verifier)
 	if err != nil {
 		return nil, err
 	}
-	if err := tok.save(cfg.TokenPath()); err != nil {
+	if err := tok.save(ep.TokenPath); err != nil {
 		return nil, apperr.Auth(fmt.Errorf("persist token: %w", err))
 	}
-	logx.Infof("authorized; token cached at %s", cfg.TokenPath())
+	logx.Infof("authorized with %s; token cached at %s", ep.Provider, ep.TokenPath)
 	return tok, nil
 }
 
 // buildAuthorizeURL constructs the /authorize URL with PKCE parameters.
-func buildAuthorizeURL(clientID, state, challenge string) string {
+func buildAuthorizeURL(ep Endpoints, state, challenge string) string {
 	q := url.Values{
-		"client_id":             {clientID},
+		"client_id":             {ep.ClientID},
 		"response_type":         {"code"},
 		"redirect_uri":          {config.RedirectURI},
-		"scope":                 {strings.Join(config.Scopes, " ")},
+		"scope":                 {strings.Join(ep.Scopes, " ")},
 		"state":                 {state},
 		"code_challenge_method": {"S256"},
 		"code_challenge":        {challenge},
 	}
-	return config.AuthorizeURL + "?" + q.Encode()
+	return ep.AuthorizeURL + "?" + q.Encode()
 }
 
 // listenerFlow runs the one-shot loopback listener on 127.0.0.1:8888, opens the
@@ -183,16 +196,16 @@ func parsePasted(s string) (code, state string) {
 }
 
 // exchangeCode swaps the authorization code + verifier for a token.
-func exchangeCode(ctx context.Context, clientID, code, verifier string) (*Token, error) {
+func exchangeCode(ctx context.Context, ep Endpoints, code, verifier string) (*Token, error) {
 	form := url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
 		"redirect_uri":  {config.RedirectURI},
-		"client_id":     {clientID},
+		"client_id":     {ep.ClientID},
 		"code_verifier": {verifier},
 	}
 	hc := &http.Client{Timeout: 30 * time.Second}
-	tr, err := doTokenRequest(ctx, hc, form)
+	tr, err := doTokenRequest(ctx, hc, ep.TokenURL, form)
 	if err != nil {
 		return nil, err
 	}

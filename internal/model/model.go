@@ -71,8 +71,11 @@ type SavedTrack struct {
 }
 
 // PlayEvent is one entry from recently-played history (append-only locally).
+// URI is the provider-scoped track URI so the store never has to know a URI
+// scheme.
 type PlayEvent struct {
 	TrackID  string    `json:"track_id"`
+	URI      string    `json:"uri"`
 	PlayedAt time.Time `json:"played_at"`
 	Title    string    `json:"title"`
 	Artist   string    `json:"artist"`

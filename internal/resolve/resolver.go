@@ -37,10 +37,12 @@ type scored struct {
 	artist bool // artist matched exactly
 }
 
-// Searcher is the minimal Spotify surface the resolver needs. The real client
-// satisfies it; tests use a stub.
+// Searcher is the minimal provider surface the resolver needs. The pick stays
+// structured across this boundary so each provider can build its own
+// best-scoped native query (Spotify: field filters; TIDAL: free text). The
+// real clients satisfy it; tests use a stub.
 type Searcher interface {
-	SearchTracks(ctx context.Context, query string, limit int) ([]model.Track, error)
+	SearchPick(ctx context.Context, artist, title, album string, limit int) ([]model.Track, error)
 }
 
 // Cache stores prior resolutions so identical inputs are free and stable. The
@@ -53,27 +55,30 @@ type Cache interface {
 
 // Resolver turns curated picks into exact URIs.
 type Resolver struct {
-	search Searcher
-	cache  Cache
+	search   Searcher
+	cache    Cache
+	provider string
 }
 
-// New builds a resolver. cache may be nil (no caching).
-func New(search Searcher, cache Cache) *Resolver {
-	return &Resolver{search: search, cache: cache}
+// New builds a resolver. cache may be nil (no caching). provider namespaces
+// the cache keys so a Spotify URI cached under a query can never replay under
+// a TIDAL deployment of the same data dir (or vice versa).
+func New(search Searcher, cache Cache, provider string) *Resolver {
+	return &Resolver{search: search, cache: cache, provider: provider}
 }
 
 // cacheEpoch versions the cache key space. Bump it whenever scoring or key
 // composition changes so entries decided under old rules (e.g. the
 // pre-album-aware scoring that could cache a soundtrack cut as exact) are
-// orphaned instead of replayed forever.
-const cacheEpoch = "v3"
+// orphaned instead of replayed forever. v4: provider joined the key.
+const cacheEpoch = "v4"
 
 // cacheKey is the stable key for a query. EVERY input that affects scoring
 // must be part of the key — duration_ms included, or a cached no-duration
 // answer silently shadows a duration-pinned re-resolve.
-func cacheKey(q model.TrackQuery) string {
-	return fmt.Sprintf("%s\x1f%s\x1f%s\x1f%s\x1f%d",
-		cacheEpoch, NormalizeArtist(q.Artist), NormalizeTitle(q.Title), NormalizeTitle(q.Album), q.DurationMs)
+func cacheKey(provider string, q model.TrackQuery) string {
+	return fmt.Sprintf("%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%d",
+		cacheEpoch, provider, NormalizeArtist(q.Artist), NormalizeTitle(q.Title), NormalizeTitle(q.Album), q.DurationMs)
 }
 
 // Resolve resolves a single pick, consulting the cache first.
@@ -84,7 +89,7 @@ func (r *Resolver) Resolve(ctx context.Context, q model.TrackQuery) (Resolution,
 		return Resolution{Query: q, Bucket: NotFound, Note: "invalid pick: artist and title are required"}, nil
 	}
 
-	key := cacheKey(q)
+	key := cacheKey(r.provider, q)
 	if r.cache != nil {
 		if track, bucket, score, ok := r.cache.GetResolution(ctx, key); ok {
 			b := Bucket(bucket)
@@ -97,15 +102,15 @@ func (r *Resolver) Resolve(ctx context.Context, q model.TrackQuery) (Resolution,
 		}
 	}
 
-	// Field-filtered search, never free text. 10 is the dev-mode search cap.
-	query := fieldQuery(q.Artist, q.Title, q.Album)
-	cands, err := r.search.SearchTracks(ctx, query, 10)
+	// Structured search — the provider builds its own scoped native query.
+	// 10 is the Spotify dev-mode search cap; a fine default everywhere.
+	cands, err := r.search.SearchPick(ctx, q.Artist, q.Title, q.Album, 10)
 	if err != nil {
 		return Resolution{}, err
 	}
 	// Retry once without album if the album filter over-constrained.
 	if len(cands) == 0 && q.Album != "" {
-		cands, err = r.search.SearchTracks(ctx, fieldQuery(q.Artist, q.Title, ""), 10)
+		cands, err = r.search.SearchPick(ctx, q.Artist, q.Title, "", 10)
 		if err != nil {
 			return Resolution{}, err
 		}
@@ -440,27 +445,4 @@ func topTracks(ranked []scored, n int) []model.Track {
 		}
 	}
 	return out
-}
-
-// fieldQuery mirrors spotify.FieldQuery here to avoid an import cycle
-// (spotify imports nothing from resolve, and resolve must not import spotify's
-// client just for a string builder).
-func fieldQuery(artist, title, album string) string {
-	var b strings.Builder
-	if title != "" {
-		b.WriteString(`track:"`)
-		b.WriteString(strings.ReplaceAll(title, `"`, ""))
-		b.WriteString(`" `)
-	}
-	if artist != "" {
-		b.WriteString(`artist:"`)
-		b.WriteString(strings.ReplaceAll(artist, `"`, ""))
-		b.WriteString(`" `)
-	}
-	if album != "" {
-		b.WriteString(`album:"`)
-		b.WriteString(strings.ReplaceAll(album, `"`, ""))
-		b.WriteString(`" `)
-	}
-	return strings.TrimSpace(b.String())
 }

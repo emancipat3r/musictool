@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/emancipat3r/spotifytool/internal/apperr"
-	"github.com/emancipat3r/spotifytool/internal/config"
 	"github.com/emancipat3r/spotifytool/internal/logx"
 )
 
@@ -110,28 +109,31 @@ type tokenResponse struct {
 }
 
 // TokenSource loads, caches, and silently refreshes access tokens for
-// non-interactive commands. It is safe for concurrent use (serve mode).
+// non-interactive commands. It is safe for concurrent use (serve mode). The
+// token endpoint is a parameter so the same machinery serves every provider
+// (Spotify, TIDAL — both OAuth2 authorization-code + PKCE).
 type TokenSource struct {
 	clientID string
+	tokenURL string
 	path     string
-	seed     string // SPOTIFY_REFRESH_TOKEN, if provided
+	seed     string // *_REFRESH_TOKEN env bootstrap, if provided
 	http     *http.Client
 
 	mu  sync.Mutex
 	tok *Token
 }
 
-// NewTokenSource builds a token source. If seedRefresh is non-empty (the
-// headless SPOTIFY_REFRESH_TOKEN bootstrap) and no cache exists yet, it seeds a
-// token from that refresh token on first use. The seed is also kept as a
-// fallback: if the cached refresh token is rejected (revoked, or a restored
-// volume holding a stale pre-rotation token), the seed gets one retry before
-// giving up.
-func NewTokenSource(clientID, path, seedRefresh string, hc *http.Client) *TokenSource {
+// NewTokenSource builds a token source refreshing against tokenURL. If
+// seedRefresh is non-empty (the headless *_REFRESH_TOKEN bootstrap) and no
+// cache exists yet, it seeds a token from that refresh token on first use. The
+// seed is also kept as a fallback: if the cached refresh token is rejected
+// (revoked, or a restored volume holding a stale pre-rotation token), the seed
+// gets one retry before giving up.
+func NewTokenSource(clientID, tokenURL, path, seedRefresh string, hc *http.Client) *TokenSource {
 	if hc == nil {
 		hc = &http.Client{Timeout: 30 * time.Second}
 	}
-	ts := &TokenSource{clientID: clientID, path: path, seed: seedRefresh, http: hc}
+	ts := &TokenSource{clientID: clientID, tokenURL: tokenURL, path: path, seed: seedRefresh, http: hc}
 	if seedRefresh != "" {
 		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 			ts.tok = &Token{RefreshToken: seedRefresh, TokenType: "Bearer"}
@@ -171,7 +173,7 @@ func (ts *TokenSource) AccessToken(ctx context.Context) (string, error) {
 func (ts *TokenSource) refreshLocked(ctx context.Context) error {
 	err := ts.grantLocked(ctx, ts.tok.RefreshToken)
 	if err != nil && ts.seed != "" && ts.seed != ts.tok.RefreshToken {
-		logx.Errorf("cached refresh token rejected; retrying with SPOTIFY_REFRESH_TOKEN")
+		logx.Errorf("cached refresh token rejected; retrying with the env-seeded refresh token")
 		if seedErr := ts.grantLocked(ctx, ts.seed); seedErr == nil {
 			return nil
 		}
@@ -206,14 +208,14 @@ func (ts *TokenSource) grantLocked(ctx context.Context, refreshToken string) err
 
 // postToken sends a refresh request via the shared helper.
 func (ts *TokenSource) postToken(ctx context.Context, form url.Values) (tokenResponse, error) {
-	return doTokenRequest(ctx, ts.http, form)
+	return doTokenRequest(ctx, ts.http, ts.tokenURL, form)
 }
 
 // doTokenRequest sends a form-encoded request to the token endpoint and decodes
 // the response, mapping OAuth errors to auth failures. Shared by the refresh
 // path and the interactive code-exchange path.
-func doTokenRequest(ctx context.Context, hc *http.Client, form url.Values) (tokenResponse, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, config.TokenURL, strings.NewReader(form.Encode()))
+func doTokenRequest(ctx context.Context, hc *http.Client, tokenURL string, form url.Values) (tokenResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return tokenResponse{}, err
 	}

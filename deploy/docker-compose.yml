@@ -18,8 +18,15 @@ services:
     container_name: spotifytool-spotify
     restart: unless-stopped
     environment:
-      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:?set in .env}
-      SPOTIFY_REFRESH_TOKEN: ${SPOTIFY_REFRESH_TOKEN:?run `spotifytool auth --print-refresh-token` once}
+      # Provider selection: spotify (default) or tidal. The entrypoint enforces
+      # that the matching provider's CLIENT_ID is set (compose cannot require
+      # env vars conditionally).
+      MUSIC_PROVIDER: ${MUSIC_PROVIDER:-spotify}
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
+      SPOTIFY_REFRESH_TOKEN: ${SPOTIFY_REFRESH_TOKEN:-}
+      TIDAL_CLIENT_ID: ${TIDAL_CLIENT_ID:-}
+      TIDAL_REFRESH_TOKEN: ${TIDAL_REFRESH_TOKEN:-}
+      TIDAL_COUNTRY: ${TIDAL_COUNTRY:-US}
       LASTFM_API_KEY: ${LASTFM_API_KEY:-}
       # Terminal pane target: the auth-injecting proxy (HTTPS: browsers only
       # allow clipboard access in secure contexts, so plain HTTP would break

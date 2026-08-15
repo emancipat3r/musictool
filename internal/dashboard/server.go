@@ -83,6 +83,11 @@ type pageData struct {
 	Profile     string
 	Saved       bool
 	TerminalURL string
+	// TrackURIPrefix is the provider's track URI scheme prefix (e.g.
+	// "spotify:track:"). The vote JS rebuilds full URIs from bare ids with it
+	// (html/template mangles scheme URIs in *-uri attributes to #ZgotmplZ, so
+	// tiles carry ids only).
+	TrackURIPrefix string
 }
 
 type barRow struct {
@@ -249,6 +254,7 @@ func (d *Dashboard) handleProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Dashboard) render(w http.ResponseWriter, data pageData) {
+	data.TrackURIPrefix = d.svc.SP.TrackURI("")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := d.tmpl.Execute(w, data); err != nil {
 		logx.Errorf("render dashboard: %v", err)

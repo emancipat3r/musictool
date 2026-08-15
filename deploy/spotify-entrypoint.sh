@@ -4,7 +4,13 @@
 # never writes to stdout (MCP transport hygiene).
 set -eu
 
-: "${SPOTIFY_CLIENT_ID:?SPOTIFY_CLIENT_ID must be set}"
+# Per-provider credential guard: the engine serves one provider per deployment
+# (MUSIC_PROVIDER, default spotify).
+case "${MUSIC_PROVIDER:-spotify}" in
+  spotify) : "${SPOTIFY_CLIENT_ID:?SPOTIFY_CLIENT_ID must be set (MUSIC_PROVIDER=spotify)}" ;;
+  tidal)   : "${TIDAL_CLIENT_ID:?TIDAL_CLIENT_ID must be set (MUSIC_PROVIDER=tidal)}" ;;
+  *) echo "unknown MUSIC_PROVIDER '${MUSIC_PROVIDER}' (want spotify or tidal)" >&2; exit 1 ;;
+esac
 
 # Shared self-signed TLS pair on the state volume (also used by zellij web in
 # the sandbox). HTTPS is required for browser clipboard access in the terminal.
@@ -19,7 +25,7 @@ fi
 
 # One initial sync on boot if a refresh token is present, so the dashboard has
 # data immediately. Non-fatal if it fails (e.g. token not yet minted).
-if [ -n "${SPOTIFY_REFRESH_TOKEN:-}" ]; then
+if [ -n "${SPOTIFY_REFRESH_TOKEN:-}" ] || [ -n "${TIDAL_REFRESH_TOKEN:-}" ]; then
   echo "boot: initial sync…" >&2
   spotifytool sync >/dev/null 2>>/data/sync.log || echo "boot sync failed (see /data/sync.log)" >&2
 fi

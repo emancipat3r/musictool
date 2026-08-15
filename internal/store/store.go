@@ -230,10 +230,14 @@ func (s *Store) AppendPlays(ctx context.Context, plays []model.PlayEvent) (int, 
 		// Minimal track row so plays of not-yet-saved tracks still join in
 		// signals (repeats of a discovery pick matter before it's ever liked).
 		// INSERT OR IGNORE: never clobbers a full row from a library sync.
+		uri := p.URI
+		if uri == "" {
+			uri = p.TrackID // provider omitted the URI; keep the row joinable
+		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT OR IGNORE INTO tracks(id,uri,title,primary_artist,updated_at)
 			 VALUES(?,?,?,?,?)`,
-			p.TrackID, "spotify:track:"+p.TrackID, p.Title, p.Artist, now); err != nil {
+			p.TrackID, uri, p.Title, p.Artist, now); err != nil {
 			return added, err
 		}
 		res, err := tx.ExecContext(ctx,
