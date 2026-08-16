@@ -6,8 +6,8 @@ to be the taste engine; Spotify plays; playlists are the persistence layer.
 
 ## Hard rule: use the project's tools, never the claude.ai connector
 
-All Spotify operations go through the project MCP server (`mcp__spotify__*`,
-from `.mcp.json` → http://spotify:8080/mcp). NEVER use the claude.ai Spotify
+All music-provider operations go through the project MCP server (`mcp__music__*`,
+from `.mcp.json` → http://engine:8080/mcp). NEVER use the claude.ai Spotify
 connector (`mcp__claude_ai_Spotify__*`): it cannot read the library, its
 create path substitutes tracks, and it acts on whatever account claude.ai has
 linked — all failure modes this project exists to eliminate. If the project

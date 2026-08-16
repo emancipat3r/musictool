@@ -35,6 +35,6 @@ EXPOSE 8080 8081
 VOLUME ["/data"]
 
 # Start crond (hourly sync + weekly batch) alongside the server.
-COPY deploy/spotify-entrypoint.sh /app/entrypoint.sh
+COPY deploy/engine-entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 ENTRYPOINT ["/app/entrypoint.sh"]

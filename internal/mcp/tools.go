@@ -48,7 +48,7 @@ func Tools(svc *service.Service) []Tool {
 	return []Tool{
 		{
 			Name:        "sync_library",
-			Description: "Refresh liked songs, playlists, recently-played history (append-only), and Keepers membership from Spotify into local SQLite. Set full=true for a deep sync of every playlist's tracks.",
+			Description: "Refresh liked songs, playlists, recently-played history (append-only, where the provider exposes it), and Keepers membership from the music provider into local SQLite. Set full=true for a deep sync of every playlist's tracks.",
 			InputSchema: obj(map[string]any{"full": boolProp("deep-sync all playlist tracks")}),
 			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
 				var a struct {
@@ -131,7 +131,7 @@ func Tools(svc *service.Service) []Tool {
 		},
 		{
 			Name:        "read_playlist",
-			Description: "Read a playlist's tracks LIVE from Spotify, by id or exact name (name matching is scoped to playlists the user owns). An unknown playlist is an error; an empty playlist returns an empty list — never null.",
+			Description: "Read a playlist's tracks LIVE from the music provider, by id or exact name (name matching is scoped to playlists the user owns). An unknown playlist is an error; an empty playlist returns an empty list — never null.",
 			InputSchema: obj(map[string]any{"playlist": strProp("playlist id or exact name")}, "playlist"),
 			Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
 				var a struct {
@@ -170,7 +170,7 @@ func Tools(svc *service.Service) []Tool {
 		},
 		{
 			Name:        "resolve_tracklist",
-			Description: "Deterministically resolve curated {artist,title,album?,duration_ms?} picks into exact Spotify URIs. Never substitutes. Buckets: exact = title AND artist match after normalization, unambiguously (ties collapse only when candidates share one ISRC, i.e. the same recording); probable = one side matched exactly, the other partially (accepted, flagged); ambiguous = multiple distinct recordings tied, top-3 returned (deduped by ISRC) for the caller to pick; not_found = nothing matched the title. Scores: title/artist exact are worth 100 each, +25 verbatim title (remaster tags exempt), +8 album match, +6 duration within 3s, -15 unrequested live/acoustic/remix variant, -12 non-canonical album (soundtrack/hits/karaoke/tribute) unless that album was pinned. Providing album (and duration_ms) is the reliable way to break ties.",
+			Description: "Deterministically resolve curated {artist,title,album?,duration_ms?} picks into exact provider track URIs. Never substitutes. Buckets: exact = title AND artist match after normalization, unambiguously (ties collapse only when candidates share one ISRC, i.e. the same recording); probable = one side matched exactly, the other partially (accepted, flagged); ambiguous = multiple distinct recordings tied, top-3 returned (deduped by ISRC) for the caller to pick; not_found = nothing matched the title. Scores: title/artist exact are worth 100 each, +25 verbatim title (remaster tags exempt), +8 album match, +6 duration within 3s, -15 unrequested live/acoustic/remix variant, -12 non-canonical album (soundtrack/hits/karaoke/tribute) unless that album was pinned. Providing album (and duration_ms) is the reliable way to break ties.",
 			InputSchema: obj(map[string]any{
 				"tracks": map[string]any{"type": "array", "items": trackQuerySchema, "description": "curated picks"},
 			}, "tracks"),

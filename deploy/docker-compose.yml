@@ -10,10 +10,10 @@
 # Do NOT change these to 0.0.0.0 unless your host firewall already blocks WAN.
 
 services:
-  spotify:
+  engine:
     build:
       context: ..
-      dockerfile: deploy/Dockerfile.spotify
+      dockerfile: deploy/Dockerfile.engine
     image: musictool:latest
     container_name: musictool-engine
     restart: unless-stopped
@@ -58,7 +58,7 @@ services:
       - "${LAN_IP:?set LAN_IP in .env}:8085:8085"   # dashboard http (companion app)
       - "${LAN_IP:?set LAN_IP in .env}:8084:8084"   # terminal http (companion app)
     # MCP (8080) is intentionally NOT published — container 1 reaches it over
-    # the compose network at http://spotify:8080/mcp.
+    # the compose network at http://engine:8080/mcp.
     expose:
       - "8080"
 
@@ -83,17 +83,17 @@ services:
       # volume (one-time browser warning).
       - ${ZELLIJ_CERT_DIR:-./certs}:/certs:ro
       # Docker socket for spinning up dev containers (existing sandbox pattern).
-      # Keep the spotify service OUT of this blast radius.
+      # Keep the engine service OUT of this blast radius.
       - /var/run/docker.sock:/var/run/docker.sock
     networks: [curation]
     # Zellij web (8082) is no longer published to the LAN: the terminal proxy
-    # on the spotify service (8083) is the access path, reaching this over the
+    # on the engine service (8083) is the access path, reaching this over the
     # compose network. Re-publish "${LAN_IP}:8082:8082" here if you want the
     # direct token-login path back as a fallback.
     expose:
       - "8082"
       - "8090"   # batch trigger (compose network only, allowlisted commands)
-    depends_on: [spotify]
+    depends_on: [engine]
 
 networks:
   curation:

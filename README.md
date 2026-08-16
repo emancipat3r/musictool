@@ -70,10 +70,11 @@ Two containers, one shared volume, LAN-only (reached via Tailscale):
 
 - **Container 1, `sandbox`**: Claude Code inside a named Zellij session, exposed
   to the browser via Zellij's built-in web client. This is the chat interface.
-- **Container 2, `spotify`**: `musictool serve` (MCP over Streamable HTTP on
-  the compose network) plus the read-only dashboard. Cron runs the hourly sync.
-  Pure Go, no model invocations: all Claude usage lives in container 1's
-  interactive session on the Max subscription.
+- **Container 2, `engine`**: `musictool serve` (MCP over Streamable HTTP on
+  the compose network) plus the read-only dashboard, talking to whichever
+  provider `MUSIC_PROVIDER` selects. Cron runs the hourly sync. Pure Go, no
+  model invocations: all Claude usage lives in container 1's interactive
+  session on the Max subscription.
 
 Nothing is published to the public internet. See `deploy/docker-compose.yml`.
 
@@ -201,10 +202,8 @@ silent. Exit codes: `0` ok, `1` auth, `2` API, `3` partial.
 `create_playlist_exact`, `add_to_playlist_exact`, `remove_from_playlist_exact`,
 `delete_playlist`, `get_taste_deltas`, `get_batches`, `get_artist_tags`,
 `get_similar_artists`. All return compact structured fields, never full
-provider objects, and all are provider-agnostic. (The MCP server key in
-`.mcp.json` is historically named `spotify`, so tools surface as
-`mcp__spotify__*` regardless of backend; renaming it is cosmetic but touches
-CLAUDE.md and any saved prompts.)
+provider objects, and all are provider-agnostic: the same tool surface
+(`mcp__music__*`, server key `music` in `.mcp.json`) drives either backend.
 
 ## Security posture
 

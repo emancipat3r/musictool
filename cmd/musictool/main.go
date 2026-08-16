@@ -1,7 +1,7 @@
 // Command musictool is the self-hosted junction between Claude's curation and
-// Spotify's catalog: PKCE auth, library sync into SQLite, the deterministic
-// resolver, exact playlist builds with read-back verification, and an MCP +
-// dashboard server.
+// the streaming provider's catalog (Spotify or TIDAL): PKCE auth, library sync
+// into SQLite, the deterministic resolver, exact playlist builds with
+// read-back verification, and an MCP + dashboard server.
 //
 // CLI convention (absolute in serve mode): data (JSON) goes to stdout, all
 // progress/diagnostics go to stderr. Exit codes: 0 ok / 1 auth / 2 API /
@@ -87,7 +87,7 @@ func usage() {
 usage: musictool <command> [flags]
 
 commands:
-  auth       one-time interactive Spotify authorization (PKCE + loopback/OOB)
+  auth       one-time interactive provider authorization (PKCE + loopback/OOB)
   sync       refresh liked songs, playlists, plays, Keepers into SQLite
   serve      run the MCP server (Streamable HTTP) + read-only dashboard
   build      resolve a tracklist and create an exact, verified playlist
