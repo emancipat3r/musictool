@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Spotifytool" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.Musictool" parent="android:Theme.Material.NoActionBar">
         <item name="android:colorPrimary">#B49B72</item>
         <item name="android:colorAccent">#B49B72</item>
         <item name="android:windowBackground">#282828</item>

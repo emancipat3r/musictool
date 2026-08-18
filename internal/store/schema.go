@@ -1,6 +1,6 @@
 package store
 
-// schemaSQL is the full DDL, applied idempotently on Open. Only spotifytool
+// schemaSQL is the full DDL, applied idempotently on Open. Only musictool
 // writes here (Claude via MCP tools, the dashboard via this same package).
 const schemaSQL = `
 CREATE TABLE IF NOT EXISTS artists (

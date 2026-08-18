@@ -1,5 +1,5 @@
 // Package spotify is a thin, auditable HTTP client over the documented Spotify
-// Web API endpoints spotifytool actually uses. No SDK, no algorithmic surfaces
+// Web API endpoints musictool actually uses. No SDK, no algorithmic surfaces
 // (audio-features/recommendations/related-artists are deprecated upstream).
 package spotify
 

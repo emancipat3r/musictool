@@ -9,7 +9,7 @@ import (
 )
 
 func testServer() *Server {
-	return NewServer("spotifytool-test", "0.0.0", []Tool{
+	return NewServer("musictool-test", "0.0.0", []Tool{
 		{
 			Name:        "echo",
 			Description: "echoes back its message",

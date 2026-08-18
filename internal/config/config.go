@@ -1,5 +1,5 @@
 // Package config centralizes filesystem paths, environment lookups, and the
-// fixed Spotify constants (redirect URI, scopes) used across spotifytool.
+// per-provider constants (redirect URI, scopes) used across musictool.
 //
 // Path resolution honors XDG and explicit overrides so the same binary works
 // both on a developer laptop (auth once) and inside container 2 (shared
@@ -78,7 +78,7 @@ type Config struct {
 	TidalRefreshToken string // TIDAL_REFRESH_TOKEN (optional headless bootstrap)
 	TidalCountry      string // TIDAL_COUNTRY (ISO 3166-1 alpha-2, default US)
 
-	// TerminalURL is the Zellij web client address (SPOTIFYTOOL_TERMINAL_URL),
+	// TerminalURL is the Zellij web client address (MUSICTOOL_TERMINAL_URL),
 	// e.g. https://homelab.tailnet-name.ts.net:8082. When set, the dashboard
 	// grows a terminal pane (iframe + open-in-tab link) per the PRD's
 	// control-room layout. Empty hides the pane.
@@ -86,11 +86,11 @@ type Config struct {
 
 	// TerminalURLHTTP is the plain-HTTP terminal proxy address served to
 	// clients that arrive over HTTP (the companion app), where WebView TLS
-	// quirks make wss unreliable (SPOTIFYTOOL_TERMINAL_URL_HTTP).
+	// quirks make wss unreliable (MUSICTOOL_TERMINAL_URL_HTTP).
 	TerminalURLHTTP string
 
 	// TriggerURL is the sandbox's command-injection endpoint
-	// (SPOTIFYTOOL_TRIGGER_URL, e.g. http://sandbox:8090) used by the
+	// (MUSICTOOL_TRIGGER_URL, e.g. http://sandbox:8090) used by the
 	// dashboard's "Run discovery batch" button. Empty disables the button's
 	// backend.
 	TriggerURL string

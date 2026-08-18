@@ -183,7 +183,7 @@ func (d *Dashboard) handleBatch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if d.cfg.TriggerURL == "" {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "trigger not configured (SPOTIFYTOOL_TRIGGER_URL)"})
+		json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "trigger not configured (MUSICTOOL_TRIGGER_URL)"})
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)

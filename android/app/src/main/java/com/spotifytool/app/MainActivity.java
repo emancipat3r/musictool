@@ -39,7 +39,7 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 /**
- * Gated WebView over the spotifytool dashboard.
+ * Gated WebView over the musictool dashboard.
  *
  * Flow: probe the dashboard directly first (it is reachable from home wifi
  * without any VPN, and from anywhere when Tailscale is up via the subnet
@@ -235,7 +235,7 @@ public class MainActivity extends Activity {
         dlp.rightMargin = dp(10);
         brand.addView(dot, dlp);
         TextView title = new TextView(this);
-        title.setText("spotifytool");
+        title.setText("musictool");
         title.setTextColor(COL_FG);
         title.setTextSize(26);
         title.setTypeface(null, android.graphics.Typeface.BOLD);

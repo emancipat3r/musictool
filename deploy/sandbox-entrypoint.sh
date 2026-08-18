@@ -34,7 +34,7 @@ else
     mkdir -p "${GEN_DIR}"
     openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
       -keyout "$KEY" -out "$CERT" -days 3650 -nodes \
-      -subj "/CN=spotifytool-sandbox" >/dev/null 2>&1
+      -subj "/CN=musictool-sandbox" >/dev/null 2>&1
   fi
 fi
 
@@ -42,13 +42,13 @@ fi
 # carries .mcp.json (spotify MCP wiring) and CLAUDE.md (workflow doc).
 # Owner's defaults: permission prompts off (contained, LAN-only sandbox; needs
 # IS_SANDBOX=1 since we run as root) and Remote Control on, so the session is
-# drivable from the Claude mobile app as "spotifytool".
+# drivable from the Claude mobile app as "musictool".
 if [[ ! -f "${ZDIR}/layouts/claude.kdl" ]]; then
   cat > "${ZDIR}/layouts/claude.kdl" <<'KDL'
 layout {
     pane {
         command "claude"
-        args "--allow-dangerously-skip-permissions" "--dangerously-skip-permissions" "--remote-control" "spotifytool"
+        args "--allow-dangerously-skip-permissions" "--dangerously-skip-permissions" "--remote-control" "musictool"
         cwd "/workspace"
     }
     pane size=1 borderless=true {

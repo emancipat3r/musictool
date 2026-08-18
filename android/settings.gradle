@@ -1,2 +1,2 @@
-rootProject.name = "spotifytool"
+rootProject.name = "musictool"
 include ':app'

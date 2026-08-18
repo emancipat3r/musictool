@@ -9,7 +9,7 @@ const pageTemplate = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{.Title}} · spotifytool</title>
+<title>{{.Title}} · musictool</title>
 <script>
   // Apply the stored theme before first paint to avoid a flash.
   try {
@@ -241,8 +241,8 @@ const pageTemplate = `<!doctype html>
   {{else}}
     <section>
       <h2>terminal not configured</h2>
-      <p class="muted">Set <code>SPOTIFYTOOL_TERMINAL_URL</code> to the terminal proxy address and
-         restart <code>spotifytool serve</code>. The compose file wires this from <code>.env</code>.</p>
+      <p class="muted">Set <code>MUSICTOOL_TERMINAL_URL</code> to the terminal proxy address and
+         restart <code>musictool serve</code>. The compose file wires this from <code>.env</code>.</p>
     </section>
   {{end}}
 {{else if eq .Page "profile"}}

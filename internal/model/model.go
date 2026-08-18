@@ -20,7 +20,7 @@ type Album struct {
 	ImageURL    string `json:"image_url,omitempty"`
 }
 
-// Track is the compact track shape used everywhere in spotifytool. It carries
+// Track is the compact track shape used everywhere in musictool. It carries
 // only what curation and resolution need — never a raw Spotify object.
 type Track struct {
 	ID         string   `json:"id"`

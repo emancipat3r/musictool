@@ -199,7 +199,7 @@ func (tp *TermProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // webglStub satisfies zellij web's `new WebglAddon.WebglAddon()` +
 // loadAddon lifecycle without ever creating a WebGL context.
-const webglStub = `// spotifytool stub: WebGL renderer disabled (breaks on Android WebView);
+const webglStub = `// musictool stub: WebGL renderer disabled (breaks on Android WebView);
 // xterm.js falls back to its DOM renderer.
 (function () {
   function WebglAddon() {}

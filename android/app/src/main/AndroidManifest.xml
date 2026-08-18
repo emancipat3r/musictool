@@ -10,9 +10,9 @@
     </queries>
 
     <application
-        android:label="spotifytool"
+        android:label="musictool"
         android:icon="@mipmap/ic_launcher"
-        android:theme="@style/Theme.Spotifytool"
+        android:theme="@style/Theme.Musictool"
         android:usesCleartextTraffic="true">
 
         <activity

@@ -11,7 +11,7 @@ import (
 	"github.com/emancipat3r/musictool/internal/model"
 )
 
-// The attrs structs mirror only the fields spotifytool consumes from TIDAL
+// The attrs structs mirror only the fields musictool consumes from TIDAL
 // JSON:API resources. They are converted to model types immediately so nothing
 // upstream leaks a raw API object into the store or the MCP surface.
 

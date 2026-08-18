@@ -20,7 +20,7 @@ if [ ! -f "${CERT_DIR}/cert.pem" ] || [ ! -f "${CERT_DIR}/key.pem" ]; then
   mkdir -p "${CERT_DIR}"
   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
     -keyout "${CERT_DIR}/key.pem" -out "${CERT_DIR}/cert.pem" \
-    -days 3650 -nodes -subj "/CN=spotifytool" >/dev/null 2>&1
+    -days 3650 -nodes -subj "/CN=musictool" >/dev/null 2>&1
 fi
 
 # One initial sync on boot if a refresh token is present, so the dashboard has

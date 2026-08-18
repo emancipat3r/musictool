@@ -1,4 +1,4 @@
-// Companion Android app: gated WebView over the spotifytool dashboard.
+// Companion Android app: gated WebView over the musictool dashboard.
 buildscript {
     repositories { google(); mavenCentral() }
     dependencies { classpath 'com.android.tools.build:gradle:8.4.0' }

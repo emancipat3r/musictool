@@ -2,6 +2,7 @@
 /bin/
 /dist/
 /spotifytool
+/musictool
 *.test
 *.out
 
@@ -35,3 +36,4 @@ build*.json
 /android-sdk/
 /.gradle/
 /spotifytool.apk
+/musictool.apk

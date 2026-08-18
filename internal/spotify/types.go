@@ -2,7 +2,7 @@ package spotify
 
 import "github.com/emancipat3r/musictool/internal/model"
 
-// The structs below mirror only the fields spotifytool consumes from Spotify
+// The structs below mirror only the fields musictool consumes from Spotify
 // Web API responses. They are converted to model types immediately so nothing
 // upstream leaks a raw API object into the store or the MCP surface.
 

@@ -84,7 +84,7 @@ func (c *Client) Capabilities() provider.Capabilities {
 }
 
 // PlaylistURI and TrackURI render ids in the tidal URI scheme (internal to
-// spotifytool; TIDAL itself uses bare ids).
+// musictool; TIDAL itself uses bare ids).
 func (c *Client) PlaylistURI(id string) string { return "tidal:playlist:" + id }
 func (c *Client) TrackURI(id string) string    { return trackURI(id) }
 
